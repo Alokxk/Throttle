@@ -15,6 +15,9 @@ func main() {
 	pgDB := db.NewPostgresDB(cfg.DatabaseURL)
 	defer pgDB.Close()
 
+	redisClient := db.NewRedisClient(cfg.RedisURL)
+	defer redisClient.Client.Close()
+
 	http.HandleFunc("/health", healthHandler)
 
 	log.Printf("Server starting on port %s", cfg.Port)
