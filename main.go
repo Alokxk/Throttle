@@ -7,6 +7,7 @@ import (
 
 	"github.com/Alokxk/Throttle/config"
 	"github.com/Alokxk/Throttle/db"
+	"github.com/Alokxk/Throttle/handlers"
 )
 
 func main() {
@@ -18,7 +19,10 @@ func main() {
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 	defer redisClient.Client.Close()
 
+	h := &handlers.Handler{DB: pgDB}
+
 	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/register", h.Register)
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
