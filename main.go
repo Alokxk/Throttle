@@ -8,6 +8,7 @@ import (
 	"github.com/Alokxk/Throttle/config"
 	"github.com/Alokxk/Throttle/db"
 	"github.com/Alokxk/Throttle/handlers"
+	"github.com/Alokxk/Throttle/middleware"
 )
 
 func main() {
@@ -23,6 +24,8 @@ func main() {
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/register", h.Register)
+	http.HandleFunc("/check", middleware.Auth(pgDB, h.Check))
+	http.HandleFunc("/stats/", middleware.Auth(pgDB, h.Stats))
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {

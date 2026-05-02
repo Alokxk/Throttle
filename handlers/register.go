@@ -60,3 +60,13 @@ func generateAPIKey() (string, error) {
 	}
 	return "thr_" + hex.EncodeToString(bytes), nil
 }
+
+func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+}
+
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
+}
