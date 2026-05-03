@@ -20,7 +20,10 @@ func main() {
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 	defer redisClient.Client.Close()
 
-	h := &handlers.Handler{DB: pgDB}
+	h := &handlers.Handler{
+		DB:    pgDB,
+		Redis: redisClient,
+	}
 
 	http.HandleFunc("/health", healthHandler)
 	http.HandleFunc("/register", h.Register)

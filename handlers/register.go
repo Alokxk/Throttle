@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/Alokxk/Throttle/db"
 	"github.com/Alokxk/Throttle/models"
 )
 
@@ -16,7 +17,8 @@ type RegisterRequest struct {
 }
 
 type Handler struct {
-	DB *sql.DB
+	DB    *sql.DB
+	Redis *db.RedisClient
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -59,14 +61,4 @@ func generateAPIKey() (string, error) {
 		return "", err
 	}
 	return "thr_" + hex.EncodeToString(bytes), nil
-}
-
-func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
-}
-
-func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "not implemented"})
 }
