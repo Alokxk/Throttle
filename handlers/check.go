@@ -20,7 +20,7 @@ type CheckRequest struct {
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -28,12 +28,22 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 
 	var req CheckRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
-	if req.Identifier == "" || req.Limit <= 0 || req.Algorithm == "" {
-		http.Error(w, "identifier, limit, and algorithm are required", http.StatusBadRequest)
+	if req.Identifier == "" {
+		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
+		return
+	}
+
+	if req.Limit <= 0 {
+		writeError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
+		return
+	}
+
+	if req.Algorithm == "" {
+		writeError(w, http.StatusBadRequest, "Algorithm is required", "MISSING_ALGORITHM")
 		return
 	}
 
@@ -44,14 +54,14 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	switch req.Algorithm {
 	case "fixed_window":
 		if req.Window <= 0 {
-			http.Error(w, "window is required for fixed_window", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
 			return
 		}
 		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
 
 	case "sliding_window":
 		if req.Window <= 0 {
-			http.Error(w, "window is required for sliding_window", http.StatusBadRequest)
+			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
 			return
 		}
 		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
@@ -64,13 +74,13 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis.TokenBucketSHA, client.APIKey, req.Identifier, req.Limit, refillRate)
 
 	default:
-		http.Error(w, "algorithm must be fixed_window, sliding_window, or token_bucket", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
 		return
 	}
 
 	if err != nil {
 		log.Printf("algorithm error: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
 	}
 
