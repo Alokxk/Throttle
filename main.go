@@ -29,6 +29,8 @@ func main() {
 	http.HandleFunc("/register", h.Register)
 	http.HandleFunc("/check", middleware.Auth(pgDB, h.Check))
 	http.HandleFunc("/stats/", middleware.Auth(pgDB, h.Stats))
+	http.HandleFunc("/rules", middleware.Auth(pgDB, h.CreateRule))
+	http.HandleFunc("/rules/list", middleware.Auth(pgDB, h.ListRules))
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {

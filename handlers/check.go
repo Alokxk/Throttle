@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Alokxk/Throttle/algorithms"
 	"github.com/Alokxk/Throttle/middleware"
+	"github.com/Alokxk/Throttle/models"
 )
 
 type CheckRequest struct {
@@ -17,6 +19,7 @@ type CheckRequest struct {
 	Window     int     `json:"window"`
 	Algorithm  string  `json:"algorithm"`
 	RefillRate float64 `json:"refill_rate"`
+	Rule       string  `json:"rule"`
 }
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +39,21 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	if req.Identifier == "" {
 		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
 		return
+	}
+
+	if req.Rule != "" {
+		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				writeError(w, http.StatusBadRequest, "Rule not found", "RULE_NOT_FOUND")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "Failed to fetch rule", "INTERNAL_ERROR")
+			return
+		}
+		req.Algorithm = rule.Algorithm
+		req.Limit = rule.Limit
+		req.Window = rule.Window
 	}
 
 	if req.Limit <= 0 {
