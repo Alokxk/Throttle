@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/Alokxk/Throttle/algorithms"
 	"github.com/Alokxk/Throttle/middleware"
@@ -88,6 +89,15 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(req.Limit))
+	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
+	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt, 10))
+	w.Header().Set("X-RateLimit-Algorithm", req.Algorithm)
+
+	if !result.Allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"allowed":     result.Allowed,
