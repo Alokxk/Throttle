@@ -54,15 +54,12 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		req.Algorithm = rule.Algorithm
 		req.Limit = rule.Limit
 		req.Window = rule.Window
+	} else if req.Algorithm == "" {
+		req.Algorithm = client.DefaultAlgorithm
 	}
 
 	if req.Limit <= 0 {
 		writeError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
-		return
-	}
-
-	if req.Algorithm == "" {
-		writeError(w, http.StatusBadRequest, "Algorithm is required", "MISSING_ALGORITHM")
 		return
 	}
 

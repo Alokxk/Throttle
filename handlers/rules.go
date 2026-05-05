@@ -16,12 +16,6 @@ type CreateRuleRequest struct {
 	Window    int    `json:"window"`
 }
 
-var validAlgorithms = map[string]bool{
-	"fixed_window":   true,
-	"sliding_window": true,
-	"token_bucket":   true,
-}
-
 func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")

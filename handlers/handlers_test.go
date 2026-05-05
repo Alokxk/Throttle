@@ -42,14 +42,27 @@ func setupTestClient() {
 
 	h.Register(w, req)
 
-	if w.Code == http.StatusConflict {
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if w.Code == http.StatusCreated {
+		apiKey = resp["api_key"].(string)
+		clientID = resp["client_id"].(string)
 		return
 	}
 
-	var resp map[string]interface{}
-	json.NewDecoder(w.Body).Decode(&resp)
-	apiKey = resp["api_key"].(string)
-	clientID = resp["client_id"].(string)
+	if w.Code == http.StatusConflict {
+		fetchExistingClient()
+		return
+	}
+}
+
+func fetchExistingClient() {
+	row := h.DB.QueryRow(`
+		SELECT api_key, id FROM clients 
+		WHERE email = 'testsuite@throttle.dev' AND is_active = true
+	`)
+	row.Scan(&apiKey, &clientID)
 }
 
 func makeCheckRequest(identifier, algorithm string, limit, window int) *httptest.ResponseRecorder {

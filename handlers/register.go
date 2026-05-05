@@ -18,8 +18,15 @@ type Handler struct {
 }
 
 type RegisterRequest struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name             string `json:"name"`
+	Email            string `json:"email"`
+	DefaultAlgorithm string `json:"default_algorithm"`
+}
+
+var validAlgorithms = map[string]bool{
+	"fixed_window":   true,
+	"sliding_window": true,
+	"token_bucket":   true,
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -47,13 +54,22 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.DefaultAlgorithm == "" {
+		req.DefaultAlgorithm = "fixed_window"
+	}
+
+	if !validAlgorithms[req.DefaultAlgorithm] {
+		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
+		return
+	}
+
 	apiKey, err := generateAPIKey()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to generate API key", "INTERNAL_ERROR")
 		return
 	}
 
-	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey)
+	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey, req.DefaultAlgorithm)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
 			writeError(w, http.StatusConflict, "Email already registered", "EMAIL_EXISTS")
