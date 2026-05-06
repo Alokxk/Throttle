@@ -14,12 +14,13 @@ import (
 )
 
 type CheckRequest struct {
-	Identifier string  `json:"identifier"`
-	Limit      int     `json:"limit"`
-	Window     int     `json:"window"`
-	Algorithm  string  `json:"algorithm"`
-	RefillRate float64 `json:"refill_rate"`
-	Rule       string  `json:"rule"`
+	Identifier    string  `json:"identifier"`
+	Limit         int     `json:"limit"`
+	Window        int     `json:"window"`
+	Algorithm     string  `json:"algorithm"`
+	RefillRate    float64 `json:"refill_rate"`
+	Rule          string  `json:"rule"`
+	WarnThreshold float64 `json:"warn_threshold"`
 }
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +101,14 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	warnThreshold := req.WarnThreshold
+	if warnThreshold <= 0 || warnThreshold >= 1 {
+		warnThreshold = 0.2
+	}
+	warnAt := int(float64(req.Limit) * warnThreshold)
+	result.Warning = result.Allowed && result.Remaining <= warnAt
+	result.WarnAt = warnAt
+
 	go h.logUsage(client.ID, req.Identifier, req.Algorithm, result.Allowed)
 	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
 
@@ -108,6 +117,10 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
 	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt, 10))
 	w.Header().Set("X-RateLimit-Algorithm", req.Algorithm)
+
+	if result.Warning {
+		w.Header().Set("X-RateLimit-Warning", "true")
+	}
 
 	if !result.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
@@ -120,6 +133,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		"reset_at":    result.ResetAt,
 		"algorithm":   req.Algorithm,
 		"retry_after": result.RetryAfter,
+		"warning":     result.Warning,
 	})
 }
 
@@ -199,6 +213,14 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	warnThreshold := req.WarnThreshold
+	if warnThreshold <= 0 || warnThreshold >= 1 {
+		warnThreshold = 0.2
+	}
+	warnAt := int(float64(req.Limit) * warnThreshold)
+	result.Warning = result.Allowed && result.Remaining <= warnAt
+	result.WarnAt = warnAt
+
 	go h.logUsage(client.ID, req.Identifier, req.Algorithm, result.Allowed)
 	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
 
@@ -207,6 +229,10 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
 	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt, 10))
 	w.Header().Set("X-RateLimit-Algorithm", req.Algorithm)
+
+	if result.Warning {
+		w.Header().Set("X-RateLimit-Warning", "true")
+	}
 
 	if !result.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
@@ -220,6 +246,7 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		"algorithm":   req.Algorithm,
 		"identifier":  ip,
 		"retry_after": result.RetryAfter,
+		"warning":     result.Warning,
 	})
 }
 

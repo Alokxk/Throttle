@@ -13,6 +13,8 @@ type Result struct {
 	Remaining  int
 	ResetAt    int64
 	RetryAfter int
+	Warning    bool
+	WarnAt     int
 }
 
 func FixedWindow(ctx context.Context, client *redis.Client, apiKey, identifier string, limit int, windowSeconds int) (*Result, error) {
