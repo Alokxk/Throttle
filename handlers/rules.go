@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -88,4 +89,51 @@ func (h *Handler) ListRules(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"rules": rules,
 	})
+}
+
+func (h *Handler) DeleteRule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		return
+	}
+
+	client := middleware.GetClientFromContext(r)
+
+	name := strings.TrimPrefix(r.URL.Path, "/rules/")
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "Rule name is required", "MISSING_NAME")
+		return
+	}
+
+	err := models.DeleteRule(h.DB, client.ID, name)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeError(w, http.StatusNotFound, "Rule not found", "RULE_NOT_FOUND")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "Failed to delete rule", "INTERNAL_ERROR")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Rule deleted successfully",
+	})
+}
+
+func (h *Handler) RulesRouter(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/rules/")
+
+	if path == "list" && r.Method == http.MethodGet {
+		h.ListRules(w, r)
+		return
+	}
+
+	if path != "" && r.Method == http.MethodDelete {
+		h.DeleteRule(w, r)
+		return
+	}
+
+	writeError(w, http.StatusNotFound, "Route not found", "NOT_FOUND")
 }

@@ -99,3 +99,17 @@ func ListRules(db *sql.DB, clientID string) ([]*Rule, error) {
 
 	return rules, nil
 }
+
+func DeleteRule(db *sql.DB, clientID, name string) error {
+	var id string
+	err := db.QueryRow(`
+		DELETE FROM rules
+		WHERE client_id = $1 AND name = $2
+		RETURNING id
+	`, clientID, name).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		return sql.ErrNoRows
+	}
+	return err
+}

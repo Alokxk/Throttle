@@ -30,7 +30,7 @@ func main() {
 	http.HandleFunc("/check", middleware.Auth(pgDB, h.Check))
 	http.HandleFunc("/stats/", middleware.Auth(pgDB, h.Stats))
 	http.HandleFunc("/rules", middleware.Auth(pgDB, h.CreateRule))
-	http.HandleFunc("/rules/list", middleware.Auth(pgDB, h.ListRules))
+	http.HandleFunc("/rules/", middleware.Auth(pgDB, h.RulesRouter))
 	http.HandleFunc("/check/ip", middleware.Auth(pgDB, h.CheckIP))
 
 	log.Printf("Server starting on port %s", cfg.Port)
