@@ -303,3 +303,245 @@ func TestCheck_InvalidAlgorithm(t *testing.T) {
 		t.Errorf("expected 400, got %d", w.Code)
 	}
 }
+
+// Rules tests
+
+func TestCreateRule_Success(t *testing.T) {
+	body := bytes.NewBufferString(`{"name":"test_rule","algorithm":"fixed_window","limit":10,"window":60}`)
+	req := httptest.NewRequest(http.MethodPost, "/rules", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.CreateRule)(w, req)
+
+	if w.Code != http.StatusCreated && w.Code != http.StatusConflict {
+		t.Errorf("expected 201 or 409, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateRule_InvalidAlgorithm(t *testing.T) {
+	body := bytes.NewBufferString(`{"name":"bad_rule","algorithm":"magic","limit":10,"window":60}`)
+	req := httptest.NewRequest(http.MethodPost, "/rules", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.CreateRule)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestCheckWithRule(t *testing.T) {
+	body := bytes.NewBufferString(`{"name":"suite_rule","algorithm":"fixed_window","limit":20,"window":60}`)
+	req := httptest.NewRequest(http.MethodPost, "/rules", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+	middleware.Auth(h.DB, h.CreateRule)(w, req)
+
+	w = makeCheckRequest("rule_check_user", "fixed_window", 5, 60)
+	checkBody := bytes.NewBufferString(`{"identifier":"rule_user","rule":"suite_rule"}`)
+	req = httptest.NewRequest(http.MethodPost, "/check", checkBody)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w = httptest.NewRecorder()
+	middleware.Auth(h.DB, h.Check)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["algorithm"] != "fixed_window" {
+		t.Errorf("expected algorithm=fixed_window from rule, got %v", resp["algorithm"])
+	}
+}
+
+// IP check tests
+
+func TestCheckIP_AllowsRequest(t *testing.T) {
+	body := bytes.NewBufferString(`{"limit":10,"window":60,"algorithm":"fixed_window"}`)
+	req := httptest.NewRequest(http.MethodPost, "/check/ip", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.CheckIP)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["allowed"] != true {
+		t.Errorf("expected allowed=true, got %v", resp["allowed"])
+	}
+
+	if resp["identifier"] == "" || resp["identifier"] == nil {
+		t.Error("expected identifier in response")
+	}
+}
+
+func TestCheckIP_RejectsOverLimit(t *testing.T) {
+	limit := 3
+	for i := 0; i < limit; i++ {
+		body := bytes.NewBufferString(fmt.Sprintf(`{"limit":%d,"window":60,"algorithm":"fixed_window"}`, limit))
+		req := httptest.NewRequest(http.MethodPost, "/check/ip", body)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		middleware.Auth(h.DB, h.CheckIP)(w, req)
+	}
+
+	body := bytes.NewBufferString(fmt.Sprintf(`{"limit":%d,"window":60,"algorithm":"fixed_window"}`, limit))
+	req := httptest.NewRequest(http.MethodPost, "/check/ip", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+	middleware.Auth(h.DB, h.CheckIP)(w, req)
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["allowed"] != false {
+		t.Errorf("expected allowed=false after exceeding IP limit, got %v", resp["allowed"])
+	}
+}
+
+// Soft limit tests
+
+func TestSoftLimit_WarningTriggered(t *testing.T) {
+	identifier := "soft_limit_test"
+	limit := 5
+
+	var lastResp map[string]interface{}
+	for i := 0; i < limit; i++ {
+		body := fmt.Sprintf(`{"identifier":"%s","limit":%d,"window":60,"algorithm":"fixed_window","warn_threshold":0.4}`, identifier, limit)
+		req := httptest.NewRequest(http.MethodPost, "/check", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", apiKey)
+		w := httptest.NewRecorder()
+		middleware.Auth(h.DB, h.Check)(w, req)
+		json.NewDecoder(w.Body).Decode(&lastResp)
+	}
+
+	if lastResp["warning"] != true {
+		t.Errorf("expected warning=true when remaining <= 40%% of limit, got %v", lastResp["warning"])
+	}
+}
+
+func TestSoftLimit_NoWarningAtStart(t *testing.T) {
+	body := bytes.NewBufferString(`{"identifier":"no_warn_test","limit":100,"window":60,"algorithm":"fixed_window"}`)
+	req := httptest.NewRequest(http.MethodPost, "/check", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.Check)(w, req)
+
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["warning"] != false {
+		t.Errorf("expected warning=false on first request, got %v", resp["warning"])
+	}
+}
+
+// Reset tests
+
+func TestReset_ClearsCounter(t *testing.T) {
+	identifier := "reset_test_suite"
+	limit := 3
+
+	for i := 0; i < limit+1; i++ {
+		makeCheckRequest(identifier, "fixed_window", limit, 60)
+	}
+
+	body := fmt.Sprintf(`{"identifier":"%s","algorithm":"fixed_window"}`, identifier)
+	req := httptest.NewRequest(http.MethodPost, "/reset", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+	middleware.Auth(h.DB, h.Reset)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = makeCheckRequest(identifier, "fixed_window", limit, 60)
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["allowed"] != true {
+		t.Errorf("expected allowed=true after reset, got %v", resp["allowed"])
+	}
+}
+
+func TestReset_MissingIdentifier(t *testing.T) {
+	body := bytes.NewBufferString(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/reset", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.Reset)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+// Exemption tests
+
+func TestExemption_AllowsExemptedIdentifier(t *testing.T) {
+	identifier := "exempt_test_suite"
+	limit := 2
+
+	for i := 0; i < limit+1; i++ {
+		makeCheckRequest(identifier, "fixed_window", limit, 60)
+	}
+
+	body := fmt.Sprintf(`{"identifier":"%s","reason":"test exemption"}`, identifier)
+	req := httptest.NewRequest(http.MethodPost, "/exemptions", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+	middleware.Auth(h.DB, h.CreateExemption)(w, req)
+
+	if w.Code != http.StatusCreated && w.Code != http.StatusConflict {
+		t.Errorf("expected 201 or 409, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = makeCheckRequest(identifier, "fixed_window", limit, 60)
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["allowed"] != true {
+		t.Errorf("expected allowed=true for exempted identifier, got %v", resp["allowed"])
+	}
+
+	if resp["exempted"] != true {
+		t.Errorf("expected exempted=true, got %v", resp["exempted"])
+	}
+}
+
+func TestExemption_MissingIdentifier(t *testing.T) {
+	body := bytes.NewBufferString(`{"reason":"test"}`)
+	req := httptest.NewRequest(http.MethodPost, "/exemptions", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+
+	middleware.Auth(h.DB, h.CreateExemption)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
