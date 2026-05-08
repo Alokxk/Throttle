@@ -20,13 +20,26 @@ func Load() *Config {
 	root := filepath.Join(filepath.Dir(filename), "..")
 	envPath := filepath.Join(root, ".env")
 
-	if err := godotenv.Load(envPath); err != nil {
-		log.Fatal("Error loading .env file")
+	godotenv.Load(envPath)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		log.Fatal("REDIS_URL environment variable is required")
 	}
 
 	return &Config{
-		Port:        os.Getenv("PORT"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		RedisURL:    os.Getenv("REDIS_URL"),
+		Port:        port,
+		DatabaseURL: databaseURL,
+		RedisURL:    redisURL,
 	}
 }

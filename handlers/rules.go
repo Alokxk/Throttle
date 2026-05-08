@@ -10,6 +10,12 @@ import (
 	"github.com/Alokxk/Throttle/models"
 )
 
+var validAlgorithms = map[string]bool{
+	"fixed_window":   true,
+	"sliding_window": true,
+	"token_bucket":   true,
+}
+
 type CreateRuleRequest struct {
 	Name      string `json:"name"`
 	Algorithm string `json:"algorithm"`

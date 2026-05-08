@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/Alokxk/Throttle/db"
 	"github.com/Alokxk/Throttle/models"
 )
@@ -21,12 +23,6 @@ type RegisterRequest struct {
 	Name             string `json:"name"`
 	Email            string `json:"email"`
 	DefaultAlgorithm string `json:"default_algorithm"`
-}
-
-var validAlgorithms = map[string]bool{
-	"fixed_window":   true,
-	"sliding_window": true,
-	"token_bucket":   true,
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -63,13 +59,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey, err := generateAPIKey()
+	apiKey, keyPrefix, keyHash, err := generateAPIKey()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to generate API key", "INTERNAL_ERROR")
 		return
 	}
 
-	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey, req.DefaultAlgorithm)
+	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey, keyPrefix, keyHash, req.DefaultAlgorithm)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
 			writeError(w, http.StatusConflict, "Email already registered", "EMAIL_EXISTS")
@@ -79,15 +75,27 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client.APIKey = apiKey
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(client)
 }
 
-func generateAPIKey() (string, error) {
+func generateAPIKey() (apiKey, keyPrefix, keyHash string, err error) {
 	bytes := make([]byte, 12)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
+	if _, err = rand.Read(bytes); err != nil {
+		return
 	}
-	return "thr_" + hex.EncodeToString(bytes), nil
+
+	apiKey = "thr_" + hex.EncodeToString(bytes)
+	keyPrefix = apiKey[:8]
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
+	if err != nil {
+		return
+	}
+
+	keyHash = string(hash)
+	return
 }

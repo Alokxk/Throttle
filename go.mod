@@ -1,6 +1,6 @@
 module github.com/Alokxk/Throttle
 
-go 1.24.3
+go 1.25.0
 
 require github.com/joho/godotenv v1.5.1
 
@@ -12,4 +12,5 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
 )

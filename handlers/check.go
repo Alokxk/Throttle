@@ -42,7 +42,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.runCheck(w, r, client, req, req.Identifier)
+	h.runCheck(w, client, req, req.Identifier)
 }
 
 func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
@@ -60,10 +60,10 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.runCheck(w, r, client, req, ip)
+	h.runCheck(w, client, req, ip)
 }
 
-func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *models.Client, req CheckRequest, identifier string) {
+func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req CheckRequest, identifier string) {
 	exempted, exemptErr := models.IsExempted(h.DB, client.ID, identifier)
 	if exemptErr != nil {
 		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
