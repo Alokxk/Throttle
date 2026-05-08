@@ -33,6 +33,8 @@ func main() {
 	http.HandleFunc("/rules/", middleware.Auth(pgDB, h.RulesRouter))
 	http.HandleFunc("/check/ip", middleware.Auth(pgDB, h.CheckIP))
 	http.HandleFunc("/reset", middleware.Auth(pgDB, h.Reset))
+	http.HandleFunc("/exemptions", middleware.Auth(pgDB, h.CreateExemption))
+	http.HandleFunc("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter))
 
 	log.Printf("Server starting on port %s", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {

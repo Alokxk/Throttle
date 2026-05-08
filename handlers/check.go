@@ -42,6 +42,24 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	exempted, exemptErr := models.IsExempted(h.DB, client.ID, req.Identifier)
+	if exemptErr != nil {
+		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+		return
+	}
+	if exempted {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"allowed":   true,
+			"exempted":  true,
+			"remaining": -1,
+			"reset_at":  0,
+			"algorithm": "none",
+		})
+		return
+	}
+
 	if req.Rule != "" {
 		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
 		if err != nil {
@@ -153,6 +171,24 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Identifier = ip
+
+	exempted, exemptErr := models.IsExempted(h.DB, client.ID, req.Identifier)
+	if exemptErr != nil {
+		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+		return
+	}
+	if exempted {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"allowed":   true,
+			"exempted":  true,
+			"remaining": -1,
+			"reset_at":  0,
+			"algorithm": "none",
+		})
+		return
+	}
 
 	if req.Rule != "" {
 		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
