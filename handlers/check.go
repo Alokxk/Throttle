@@ -42,117 +42,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exempted, exemptErr := models.IsExempted(h.DB, client.ID, req.Identifier)
-	if exemptErr != nil {
-		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
-		return
-	}
-	if exempted {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"allowed":   true,
-			"exempted":  true,
-			"remaining": -1,
-			"reset_at":  0,
-			"algorithm": "none",
-		})
-		return
-	}
-
-	if req.Rule != "" {
-		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				writeError(w, http.StatusBadRequest, "Rule not found", "RULE_NOT_FOUND")
-				return
-			}
-			writeError(w, http.StatusInternalServerError, "Failed to fetch rule", "INTERNAL_ERROR")
-			return
-		}
-		req.Algorithm = rule.Algorithm
-		req.Limit = rule.Limit
-		req.Window = rule.Window
-	} else if req.Algorithm == "" {
-		req.Algorithm = client.DefaultAlgorithm
-	}
-
-	if req.Limit <= 0 {
-		writeError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
-		return
-	}
-
-	ctx := context.Background()
-	var result *algorithms.Result
-	var err error
-
-	switch req.Algorithm {
-	case "fixed_window":
-		if req.Window <= 0 {
-			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
-			return
-		}
-		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
-
-	case "sliding_window":
-		if req.Window <= 0 {
-			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
-			return
-		}
-		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
-
-	case "token_bucket":
-		refillRate := req.RefillRate
-		if refillRate <= 0 {
-			refillRate = float64(req.Limit) / 60.0
-		}
-		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis.TokenBucketSHA, client.APIKey, req.Identifier, req.Limit, refillRate)
-
-	default:
-		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
-		return
-	}
-
-	if err != nil {
-		log.Printf("algorithm error: %v", err)
-		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
-		return
-	}
-
-	warnThreshold := req.WarnThreshold
-	if warnThreshold <= 0 || warnThreshold >= 1 {
-		warnThreshold = 0.2
-	}
-	warnAt := int(float64(req.Limit) * warnThreshold)
-	result.Warning = result.Allowed && result.Remaining <= warnAt
-	result.WarnAt = warnAt
-
-	go h.logUsage(client.ID, req.Identifier, req.Algorithm, result.Allowed)
-	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(req.Limit))
-	w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
-	w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt, 10))
-	w.Header().Set("X-RateLimit-Algorithm", req.Algorithm)
-
-	if result.Warning {
-		w.Header().Set("X-RateLimit-Warning", "true")
-	}
-
-	if !result.Allowed {
-		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"allowed":     result.Allowed,
-		"remaining":   result.Remaining,
-		"reset_at":    result.ResetAt,
-		"algorithm":   req.Algorithm,
-		"retry_after": result.RetryAfter,
-		"warning":     result.Warning,
-	})
+	h.runCheck(w, r, client, req, req.Identifier)
 }
 
 func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
@@ -170,9 +60,11 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.Identifier = ip
+	h.runCheck(w, r, client, req, ip)
+}
 
-	exempted, exemptErr := models.IsExempted(h.DB, client.ID, req.Identifier)
+func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *models.Client, req CheckRequest, identifier string) {
+	exempted, exemptErr := models.IsExempted(h.DB, client.ID, identifier)
 	if exemptErr != nil {
 		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
@@ -181,11 +73,12 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"allowed":   true,
-			"exempted":  true,
-			"remaining": -1,
-			"reset_at":  0,
-			"algorithm": "none",
+			"allowed":    true,
+			"exempted":   true,
+			"remaining":  -1,
+			"reset_at":   0,
+			"algorithm":  "none",
+			"identifier": identifier,
 		})
 		return
 	}
@@ -222,21 +115,21 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
 			return
 		}
-		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
+		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
 
 	case "sliding_window":
 		if req.Window <= 0 {
 			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
 			return
 		}
-		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, req.Identifier, req.Limit, req.Window)
+		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
 
 	case "token_bucket":
 		refillRate := req.RefillRate
 		if refillRate <= 0 {
 			refillRate = float64(req.Limit) / 60.0
 		}
-		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis.TokenBucketSHA, client.APIKey, req.Identifier, req.Limit, refillRate)
+		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis.TokenBucketSHA, client.APIKey, identifier, req.Limit, refillRate)
 
 	default:
 		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
@@ -257,7 +150,7 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 	result.Warning = result.Allowed && result.Remaining <= warnAt
 	result.WarnAt = warnAt
 
-	go h.logUsage(client.ID, req.Identifier, req.Algorithm, result.Allowed)
+	go h.logUsage(client.ID, identifier, req.Algorithm, result.Allowed)
 	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -280,7 +173,7 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		"remaining":   result.Remaining,
 		"reset_at":    result.ResetAt,
 		"algorithm":   req.Algorithm,
-		"identifier":  ip,
+		"identifier":  identifier,
 		"retry_after": result.RetryAfter,
 		"warning":     result.Warning,
 	})
