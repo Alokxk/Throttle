@@ -13,7 +13,7 @@ import (
 
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -21,12 +21,12 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	clientID := strings.TrimPrefix(r.URL.Path, "/stats/")
 	if clientID == "" {
-		http.Error(w, "client_id is required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Client ID is required", "MISSING_CLIENT_ID")
 		return
 	}
 
 	if clientID != client.ID {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		writeError(w, http.StatusForbidden, "Forbidden", "FORBIDDEN")
 		return
 	}
 
