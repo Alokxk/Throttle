@@ -60,6 +60,20 @@ We use a Redis Lua script via `EVALSHA`. Lua scripts execute atomically on the R
 
 `WATCH/MULTI/EXEC` uses optimistic locking — if another client modifies the key between `WATCH` and `EXEC`, the transaction aborts and retries. Under high load this creates a retry storm. Lua scripts never abort — they just run.
 
+### Benchmarks
+
+Measured with `go test -bench=. -benchtime=3s`, single Redis connection, on an i5-11300H:
+
+| Algorithm      | ns/op  | ops/sec |
+| -------------- | ------ | ------- |
+| Fixed Window   | 32,180 | ~31,000 |
+| Sliding Window | 34,258 | ~29,200 |
+| Token Bucket   | 45,609 | ~21,900 |
+
+Token bucket is slower because it runs as a Lua script via `EVALSHA` — one round trip executing read-refill-write atomically — versus the pipelined `INCR`/`GET` calls used by fixed and sliding window.
+
+Concurrency correctness verified with `go test ./algorithms/... -run Concurrent -v`: 200 concurrent requests against shared identifiers never exceed the configured limit/capacity for fixed window and token bucket; sliding window stays within its documented approximation tolerance.
+
 ## Running locally
 
 ### Option 1 — Docker Compose (recommended)
