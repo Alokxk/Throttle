@@ -11,8 +11,9 @@ import (
 )
 
 type RedisClient struct {
-	Client         *redis.Client
-	TokenBucketSHA string
+	Client            *redis.Client
+	TokenBucketSHA    string
+	tokenBucketScript string
 }
 
 func NewRedisClient(redisURL string) *RedisClient {
@@ -30,15 +31,21 @@ func NewRedisClient(redisURL string) *RedisClient {
 
 	log.Println("Redis connected")
 
-	sha := loadTokenBucketScript(client, ctx)
+	script := readTokenBucketScript()
+	sha, err := client.ScriptLoad(ctx, script).Result()
+	if err != nil {
+		log.Fatalf("Failed to load token bucket script into Redis: %v", err)
+	}
+	log.Printf("Token bucket Lua script loaded, SHA: %s", sha)
 
 	return &RedisClient{
-		Client:         client,
-		TokenBucketSHA: sha,
+		Client:            client,
+		TokenBucketSHA:    sha,
+		tokenBucketScript: script,
 	}
 }
 
-func loadTokenBucketScript(client *redis.Client, ctx context.Context) string {
+func readTokenBucketScript() string {
 	_, filename, _, _ := runtime.Caller(0)
 	scriptPath := filepath.Join(filepath.Dir(filename), "..", "algorithms", "scripts", "token_bucket.lua")
 
@@ -46,12 +53,17 @@ func loadTokenBucketScript(client *redis.Client, ctx context.Context) string {
 	if err != nil {
 		log.Fatalf("Failed to read token bucket Lua script: %v", err)
 	}
+	return string(script)
+}
 
-	sha, err := client.ScriptLoad(ctx, string(script)).Result()
+// Reload re-registers the script with Redis and updates the cached SHA.
+// Call this when EVALSHA fails with NOSCRIPT (e.g. after a Redis restart
+// flushed the script cache).
+func (r *RedisClient) ReloadTokenBucketScript(ctx context.Context) (string, error) {
+	sha, err := r.Client.ScriptLoad(ctx, r.tokenBucketScript).Result()
 	if err != nil {
-		log.Fatalf("Failed to load token bucket script into Redis: %v", err)
+		return "", err
 	}
-
-	log.Printf("Token bucket Lua script loaded, SHA: %s", sha)
-	return sha
+	r.TokenBucketSHA = sha
+	return sha, nil
 }

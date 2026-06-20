@@ -129,7 +129,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 		if refillRate <= 0 {
 			refillRate = float64(req.Limit) / 60.0
 		}
-		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis.TokenBucketSHA, client.APIKey, identifier, req.Limit, refillRate)
+		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis, h.Redis.TokenBucketSHA, client.APIKey, identifier, req.Limit, refillRate)
 
 	default:
 		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
