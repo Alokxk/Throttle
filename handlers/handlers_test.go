@@ -484,6 +484,35 @@ func TestReset_ClearsCounter(t *testing.T) {
 	}
 }
 
+func TestReset_GlobIdentifierDoesNotAffectOtherIdentifiers(t *testing.T) {
+	victim := "reset_glob_victim"
+	limit := 3
+
+	for i := 0; i < limit+1; i++ {
+		makeCheckRequest(victim, "fixed_window", limit, 60)
+	}
+
+	attackerIdentifier := "reset_glob_*"
+	body := fmt.Sprintf(`{"identifier":"%s","algorithm":"fixed_window"}`, attackerIdentifier)
+	req := httptest.NewRequest(http.MethodPost, "/reset", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	w := httptest.NewRecorder()
+	middleware.Auth(h.DB, h.Reset)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	w = makeCheckRequest(victim, "fixed_window", limit, 60)
+	var resp map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp["allowed"] != false {
+		t.Errorf("glob identifier reset wiped an unrelated identifier's counter: expected allowed=false for %q, got %v", victim, resp["allowed"])
+	}
+}
+
 func TestReset_MissingIdentifier(t *testing.T) {
 	body := bytes.NewBufferString(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/reset", body)

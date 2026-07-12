@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/Alokxk/Throttle/middleware"
 )
@@ -48,8 +49,20 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func escapeGlob(s string) string {
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		`*`, `\*`,
+		`?`, `\?`,
+		`[`, `\[`,
+		`]`, `\]`,
+	)
+	return replacer.Replace(s)
+}
+
 func resetIdentifier(ctx context.Context, h *Handler, apiKey, identifier, algorithm string) (int, error) {
 	deleted := 0
+	identifier = escapeGlob(identifier)
 
 	patterns := []string{}
 
