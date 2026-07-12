@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/middleware"
 )
 
@@ -16,7 +17,7 @@ type ResetRequest struct {
 
 func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -24,19 +25,19 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 
 	var req ResetRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
 	if req.Identifier == "" {
-		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
+		httpx.WriteError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
 		return
 	}
 
 	ctx := context.Background()
 	deleted, err := resetIdentifier(ctx, h, client.APIKey, req.Identifier, req.Algorithm)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to reset identifier", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to reset identifier", "INTERNAL_ERROR")
 		return
 	}
 

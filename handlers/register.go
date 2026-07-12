@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Alokxk/Throttle/db"
+	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/models"
 )
 
@@ -27,13 +28,13 @@ type RegisterRequest struct {
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
@@ -41,12 +42,12 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	req.Email = strings.TrimSpace(req.Email)
 
 	if req.Name == "" || req.Email == "" {
-		writeError(w, http.StatusBadRequest, "Name and email are required", "MISSING_FIELDS")
+		httpx.WriteError(w, http.StatusBadRequest, "Name and email are required", "MISSING_FIELDS")
 		return
 	}
 
 	if !strings.Contains(req.Email, "@") {
-		writeError(w, http.StatusBadRequest, "Invalid email address", "INVALID_EMAIL")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid email address", "INVALID_EMAIL")
 		return
 	}
 
@@ -55,23 +56,23 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !validAlgorithms[req.DefaultAlgorithm] {
-		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
+		httpx.WriteError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
 		return
 	}
 
 	apiKey, keyPrefix, keyHash, err := generateAPIKey()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to generate API key", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to generate API key", "INTERNAL_ERROR")
 		return
 	}
 
 	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey, keyPrefix, keyHash, req.DefaultAlgorithm)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
-			writeError(w, http.StatusConflict, "Email already registered", "EMAIL_EXISTS")
+			httpx.WriteError(w, http.StatusConflict, "Email already registered", "EMAIL_EXISTS")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to create client", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to create client", "INTERNAL_ERROR")
 		return
 	}
 

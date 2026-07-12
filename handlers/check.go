@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/Alokxk/Throttle/algorithms"
+	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/middleware"
 	"github.com/Alokxk/Throttle/models"
 )
@@ -25,7 +26,7 @@ type CheckRequest struct {
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -33,12 +34,12 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 
 	var req CheckRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
 	if req.Identifier == "" {
-		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
+		httpx.WriteError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
 		return
 	}
 
@@ -47,7 +48,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -56,7 +57,7 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 
 	var req CheckRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
@@ -66,7 +67,7 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req CheckRequest, identifier string) {
 	exempted, exemptErr := models.IsExempted(h.DB, client.ID, identifier)
 	if exemptErr != nil {
-		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
 	}
 	if exempted {
@@ -87,10 +88,10 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
 		if err != nil {
 			if err == sql.ErrNoRows {
-				writeError(w, http.StatusBadRequest, "Rule not found", "RULE_NOT_FOUND")
+				httpx.WriteError(w, http.StatusBadRequest, "Rule not found", "RULE_NOT_FOUND")
 				return
 			}
-			writeError(w, http.StatusInternalServerError, "Failed to fetch rule", "INTERNAL_ERROR")
+			httpx.WriteError(w, http.StatusInternalServerError, "Failed to fetch rule", "INTERNAL_ERROR")
 			return
 		}
 		req.Algorithm = rule.Algorithm
@@ -101,7 +102,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 	}
 
 	if req.Limit <= 0 {
-		writeError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
+		httpx.WriteError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
 		return
 	}
 
@@ -112,14 +113,14 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 	switch req.Algorithm {
 	case "fixed_window":
 		if req.Window <= 0 {
-			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
+			httpx.WriteError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
 			return
 		}
 		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
 
 	case "sliding_window":
 		if req.Window <= 0 {
-			writeError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
+			httpx.WriteError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
 			return
 		}
 		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
@@ -132,13 +133,13 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis, h.Redis.TokenBucketSHA, client.APIKey, identifier, req.Limit, refillRate)
 
 	default:
-		writeError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
+		httpx.WriteError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
 		return
 	}
 
 	if err != nil {
 		log.Printf("algorithm error: %v", err)
-		writeError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
 	}
 

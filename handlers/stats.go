@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/middleware"
 	"github.com/redis/go-redis/v9"
 )
 
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -21,12 +22,12 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 	clientID := strings.TrimPrefix(r.URL.Path, "/stats/")
 	if clientID == "" {
-		writeError(w, http.StatusBadRequest, "Client ID is required", "MISSING_CLIENT_ID")
+		httpx.WriteError(w, http.StatusBadRequest, "Client ID is required", "MISSING_CLIENT_ID")
 		return
 	}
 
 	if clientID != client.ID {
-		writeError(w, http.StatusForbidden, "Forbidden", "FORBIDDEN")
+		httpx.WriteError(w, http.StatusForbidden, "Forbidden", "FORBIDDEN")
 		return
 	}
 

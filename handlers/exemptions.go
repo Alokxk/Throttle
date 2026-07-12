@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/middleware"
 	"github.com/Alokxk/Throttle/models"
 )
@@ -28,12 +29,12 @@ func (h *Handler) ExemptionsRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeError(w, http.StatusNotFound, "Route not found", "NOT_FOUND")
+	httpx.WriteError(w, http.StatusNotFound, "Route not found", "NOT_FOUND")
 }
 
 func (h *Handler) CreateExemption(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -41,23 +42,23 @@ func (h *Handler) CreateExemption(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateExemptionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid request body", "INVALID_BODY")
 		return
 	}
 
 	req.Identifier = strings.TrimSpace(req.Identifier)
 	if req.Identifier == "" {
-		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
+		httpx.WriteError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
 		return
 	}
 
 	exemption, err := models.CreateExemption(h.DB, client.ID, req.Identifier, req.Reason)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
-			writeError(w, http.StatusConflict, "Identifier already exempted", "ALREADY_EXEMPTED")
+			httpx.WriteError(w, http.StatusConflict, "Identifier already exempted", "ALREADY_EXEMPTED")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to create exemption", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to create exemption", "INTERNAL_ERROR")
 		return
 	}
 
@@ -68,7 +69,7 @@ func (h *Handler) CreateExemption(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ListExemptions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -76,7 +77,7 @@ func (h *Handler) ListExemptions(w http.ResponseWriter, r *http.Request) {
 
 	exemptions, err := models.ListExemptions(h.DB, client.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to fetch exemptions", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to fetch exemptions", "INTERNAL_ERROR")
 		return
 	}
 
@@ -92,7 +93,7 @@ func (h *Handler) ListExemptions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteExemption(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		writeError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
 		return
 	}
 
@@ -100,17 +101,17 @@ func (h *Handler) DeleteExemption(w http.ResponseWriter, r *http.Request) {
 
 	identifier := strings.TrimPrefix(r.URL.Path, "/exemptions/")
 	if identifier == "" {
-		writeError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
+		httpx.WriteError(w, http.StatusBadRequest, "Identifier is required", "MISSING_IDENTIFIER")
 		return
 	}
 
 	err := models.DeleteExemption(h.DB, client.ID, identifier)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			writeError(w, http.StatusNotFound, "Exemption not found", "EXEMPTION_NOT_FOUND")
+			httpx.WriteError(w, http.StatusNotFound, "Exemption not found", "EXEMPTION_NOT_FOUND")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "Failed to delete exemption", "INTERNAL_ERROR")
+		httpx.WriteError(w, http.StatusInternalServerError, "Failed to delete exemption", "INTERNAL_ERROR")
 		return
 	}
 
