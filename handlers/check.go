@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -140,7 +140,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 	}
 
 	if err != nil {
-		log.Printf("algorithm error: %v", err)
+		slog.Error("algorithm error", "error", err, "algorithm", req.Algorithm, "request_id", middleware.RequestIDFromContext(ctx))
 		httpx.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
 	}
@@ -158,6 +158,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 		identifier: identifier,
 		algorithm:  req.Algorithm,
 		allowed:    result.Allowed,
+		requestID:  middleware.RequestIDFromContext(ctx),
 	})
 
 	w.Header().Set("Content-Type", "application/json")
@@ -186,7 +187,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 	})
 }
 
-func (h *Handler) logUsage(clientID, identifier, algorithm string, allowed bool) {
+func (h *Handler) logUsage(clientID, identifier, algorithm string, allowed bool, requestID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), httpx.RequestTimeout)
 	defer cancel()
 
@@ -195,11 +196,11 @@ func (h *Handler) logUsage(clientID, identifier, algorithm string, allowed bool)
 		VALUES ($1, $2, $3, $4)
 	`, clientID, identifier, algorithm, allowed)
 	if err != nil {
-		log.Printf("failed to log usage: %v", err)
+		slog.Error("failed to log usage", "error", err, "client_id", clientID, "request_id", requestID)
 	}
 }
 
-func (h *Handler) incrementStats(clientID, algorithm string, allowed bool) {
+func (h *Handler) incrementStats(clientID, algorithm string, allowed bool, requestID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), httpx.RequestTimeout)
 	defer cancel()
 
@@ -215,6 +216,6 @@ func (h *Handler) incrementStats(clientID, algorithm string, allowed bool) {
 	}
 
 	if _, err := pipe.Exec(ctx); err != nil {
-		log.Printf("failed to increment stats: %v", err)
+		slog.Error("failed to increment stats", "error", err, "client_id", clientID, "request_id", requestID)
 	}
 }

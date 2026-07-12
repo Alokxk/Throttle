@@ -2,7 +2,7 @@ package db
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,24 +19,27 @@ type RedisClient struct {
 func NewRedisClient(redisURL string) *RedisClient {
 	opts, err := redis.ParseURL(redisURL)
 	if err != nil {
-		log.Fatalf("Failed to parse Redis URL: %v", err)
+		slog.Error("failed to parse Redis URL", "error", err)
+		os.Exit(1)
 	}
 
 	client := redis.NewClient(opts)
 
 	ctx := context.Background()
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		slog.Error("failed to connect to Redis", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Redis connected")
+	slog.Info("redis connected")
 
 	script := readTokenBucketScript()
 	sha, err := client.ScriptLoad(ctx, script).Result()
 	if err != nil {
-		log.Fatalf("Failed to load token bucket script into Redis: %v", err)
+		slog.Error("failed to load token bucket script into Redis", "error", err)
+		os.Exit(1)
 	}
-	log.Printf("Token bucket Lua script loaded, SHA: %s", sha)
+	slog.Info("token bucket Lua script loaded", "sha", sha)
 
 	return &RedisClient{
 		Client:            client,
@@ -51,7 +54,8 @@ func readTokenBucketScript() string {
 
 	script, err := os.ReadFile(scriptPath)
 	if err != nil {
-		log.Fatalf("Failed to read token bucket Lua script: %v", err)
+		slog.Error("failed to read token bucket Lua script", "error", err)
+		os.Exit(1)
 	}
 	return string(script)
 }

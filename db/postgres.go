@@ -2,7 +2,8 @@ package db
 
 import (
 	"database/sql"
-	"log"
+	"log/slog"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -11,7 +12,8 @@ import (
 func NewPostgresDB(databaseURL string) *sql.DB {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+		slog.Error("failed to open database", "error", err)
+		os.Exit(1)
 	}
 
 	db.SetMaxOpenConns(25)
@@ -19,9 +21,10 @@ func NewPostgresDB(databaseURL string) *sql.DB {
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("PostgreSQL connected")
+	slog.Info("postgresql connected")
 	return db
 }

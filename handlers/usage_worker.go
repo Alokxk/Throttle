@@ -1,6 +1,10 @@
 package handlers
 
-import "log"
+import (
+	"log/slog"
+
+	"github.com/Alokxk/Throttle/metrics"
+)
 
 const (
 	usageWorkerCount = 10
@@ -12,6 +16,7 @@ type usageJob struct {
 	identifier string
 	algorithm  string
 	allowed    bool
+	requestID  string
 }
 
 func (h *Handler) startUsageWorkers() {
@@ -22,8 +27,8 @@ func (h *Handler) startUsageWorkers() {
 
 func (h *Handler) usageWorker() {
 	for job := range h.usageJobs {
-		h.logUsage(job.clientID, job.identifier, job.algorithm, job.allowed)
-		h.incrementStats(job.clientID, job.algorithm, job.allowed)
+		h.logUsage(job.clientID, job.identifier, job.algorithm, job.allowed, job.requestID)
+		h.incrementStats(job.clientID, job.algorithm, job.allowed, job.requestID)
 	}
 }
 
@@ -33,6 +38,8 @@ func (h *Handler) enqueueUsage(job usageJob) {
 	select {
 	case h.usageJobs <- job:
 	default:
-		log.Printf("usage job queue full, dropping usage record for client=%s identifier=%s", job.clientID, job.identifier)
+		metrics.UsageJobsDropped.Inc()
+		slog.Warn("usage job queue full, dropping usage record", "client_id", job.clientID, "identifier", job.identifier, "request_id", job.requestID)
 	}
+	metrics.UsageQueueLength.Set(float64(len(h.usageJobs)))
 }

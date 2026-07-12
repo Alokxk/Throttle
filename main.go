@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/Alokxk/Throttle/config"
 	"github.com/Alokxk/Throttle/db"
@@ -15,6 +20,8 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	cfg := config.Load()
 
 	pgDB := db.NewPostgresDB(cfg.DatabaseURL)
@@ -25,23 +32,27 @@ func main() {
 
 	h := handlers.NewHandler(pgDB, redisClient)
 
-	http.HandleFunc("/health", h.Health)
-	http.HandleFunc("/register", h.Register)
-	http.HandleFunc("/check", middleware.Auth(pgDB, h.Check))
-	http.HandleFunc("/stats/", middleware.Auth(pgDB, h.Stats))
-	http.HandleFunc("/rules", middleware.Auth(pgDB, h.CreateRule))
-	http.HandleFunc("/rules/", middleware.Auth(pgDB, h.RulesRouter))
-	http.HandleFunc("/check/ip", middleware.Auth(pgDB, h.CheckIP))
-	http.HandleFunc("/reset", middleware.Auth(pgDB, h.Reset))
-	http.HandleFunc("/exemptions", middleware.Auth(pgDB, h.CreateExemption))
-	http.HandleFunc("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter))
+	prometheus.MustRegister(collectors.NewDBStatsCollector(pgDB, "throttle"))
+	http.Handle("/metrics", promhttp.Handler())
+
+	http.HandleFunc("/health", middleware.RequestID(middleware.Metrics("/health", h.Health)))
+	http.HandleFunc("/register", middleware.RequestID(middleware.Metrics("/register", h.Register)))
+	http.HandleFunc("/check", middleware.RequestID(middleware.Metrics("/check", middleware.Auth(pgDB, h.Check))))
+	http.HandleFunc("/stats/", middleware.RequestID(middleware.Metrics("/stats/", middleware.Auth(pgDB, h.Stats))))
+	http.HandleFunc("/rules", middleware.RequestID(middleware.Metrics("/rules", middleware.Auth(pgDB, h.CreateRule))))
+	http.HandleFunc("/rules/", middleware.RequestID(middleware.Metrics("/rules/", middleware.Auth(pgDB, h.RulesRouter))))
+	http.HandleFunc("/check/ip", middleware.RequestID(middleware.Metrics("/check/ip", middleware.Auth(pgDB, h.CheckIP))))
+	http.HandleFunc("/reset", middleware.RequestID(middleware.Metrics("/reset", middleware.Auth(pgDB, h.Reset))))
+	http.HandleFunc("/exemptions", middleware.RequestID(middleware.Metrics("/exemptions", middleware.Auth(pgDB, h.CreateExemption))))
+	http.HandleFunc("/exemptions/", middleware.RequestID(middleware.Metrics("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter))))
 
 	server := &http.Server{Addr: ":" + cfg.Port}
 
 	go func() {
-		log.Printf("Server starting on port %s", cfg.Port)
+		slog.Info("server starting", "port", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -49,14 +60,14 @@ func main() {
 	defer stop()
 	<-ctx.Done()
 
-	log.Println("Shutdown signal received, draining in-flight requests...")
+	slog.Info("shutdown signal received, draining in-flight requests")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		slog.Error("graceful shutdown failed", "error", err)
 	} else {
-		log.Println("Server shut down cleanly")
+		slog.Info("server shut down cleanly")
 	}
 }
