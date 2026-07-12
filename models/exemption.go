@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -13,7 +14,7 @@ type Exemption struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-func CreateExemption(db *sql.DB, clientID, identifier, reason string) (*Exemption, error) {
+func CreateExemption(ctx context.Context, db *sql.DB, clientID, identifier, reason string) (*Exemption, error) {
 	exemption := &Exemption{}
 
 	query := `
@@ -22,7 +23,7 @@ func CreateExemption(db *sql.DB, clientID, identifier, reason string) (*Exemptio
 		RETURNING id, client_id, identifier, reason, created_at
 	`
 
-	err := db.QueryRow(query, clientID, identifier, reason).Scan(
+	err := db.QueryRowContext(ctx, query, clientID, identifier, reason).Scan(
 		&exemption.ID,
 		&exemption.ClientID,
 		&exemption.Identifier,
@@ -36,9 +37,9 @@ func CreateExemption(db *sql.DB, clientID, identifier, reason string) (*Exemptio
 	return exemption, nil
 }
 
-func IsExempted(db *sql.DB, clientID, identifier string) (bool, error) {
+func IsExempted(ctx context.Context, db *sql.DB, clientID, identifier string) (bool, error) {
 	var id string
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ctx, `
 		SELECT id FROM exemptions
 		WHERE client_id = $1 AND identifier = $2
 	`, clientID, identifier).Scan(&id)
@@ -52,9 +53,9 @@ func IsExempted(db *sql.DB, clientID, identifier string) (bool, error) {
 	return true, nil
 }
 
-func DeleteExemption(db *sql.DB, clientID, identifier string) error {
+func DeleteExemption(ctx context.Context, db *sql.DB, clientID, identifier string) error {
 	var id string
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ctx, `
 		DELETE FROM exemptions
 		WHERE client_id = $1 AND identifier = $2
 		RETURNING id
@@ -66,8 +67,8 @@ func DeleteExemption(db *sql.DB, clientID, identifier string) error {
 	return err
 }
 
-func ListExemptions(db *sql.DB, clientID string) ([]*Exemption, error) {
-	rows, err := db.Query(`
+func ListExemptions(ctx context.Context, db *sql.DB, clientID string) ([]*Exemption, error) {
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, client_id, identifier, reason, created_at
 		FROM exemptions
 		WHERE client_id = $1

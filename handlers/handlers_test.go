@@ -25,10 +25,7 @@ func TestMain(m *testing.M) {
 	pgDB := db.NewPostgresDB(cfg.DatabaseURL)
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 
-	h = &handlers.Handler{
-		DB:    pgDB,
-		Redis: redisClient,
-	}
+	h = handlers.NewHandler(pgDB, redisClient)
 
 	setupTestClient()
 	os.Exit(m.Run())

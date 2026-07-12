@@ -1,14 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
-
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Alokxk/Throttle/db"
 	"github.com/Alokxk/Throttle/httpx"
@@ -16,8 +16,19 @@ import (
 )
 
 type Handler struct {
-	DB    *sql.DB
-	Redis *db.RedisClient
+	DB        *sql.DB
+	Redis     *db.RedisClient
+	usageJobs chan usageJob
+}
+
+func NewHandler(database *sql.DB, redis *db.RedisClient) *Handler {
+	h := &Handler{
+		DB:        database,
+		Redis:     redis,
+		usageJobs: make(chan usageJob, usageQueueSize),
+	}
+	h.startUsageWorkers()
+	return h
 }
 
 type RegisterRequest struct {
@@ -66,7 +77,10 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client, err := models.CreateClient(h.DB, req.Name, req.Email, apiKey, keyPrefix, keyHash, req.DefaultAlgorithm)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	client, err := models.CreateClient(ctx, h.DB, req.Name, req.Email, apiKey, keyPrefix, keyHash, req.DefaultAlgorithm)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
 			httpx.WriteError(w, http.StatusConflict, "Email already registered", "EMAIL_EXISTS")
@@ -92,11 +106,7 @@ func generateAPIKey() (apiKey, keyPrefix, keyHash string, err error) {
 	apiKey = "thr_" + hex.EncodeToString(bytes)
 	keyPrefix = apiKey[:8]
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
-	if err != nil {
-		return
-	}
-
-	keyHash = string(hash)
+	hash := sha256.Sum256([]byte(apiKey))
+	keyHash = hex.EncodeToString(hash[:])
 	return
 }

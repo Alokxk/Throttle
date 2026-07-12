@@ -3,7 +3,10 @@ package httpx
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 )
+
+const RequestTimeout = 3 * time.Second
 
 type ErrorResponse struct {
 	Error string `json:"error"`

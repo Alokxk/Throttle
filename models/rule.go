@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -15,7 +16,7 @@ type Rule struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-func CreateRule(db *sql.DB, clientID, name, algorithm string, limit, window int) (*Rule, error) {
+func CreateRule(ctx context.Context, db *sql.DB, clientID, name, algorithm string, limit, window int) (*Rule, error) {
 	rule := &Rule{}
 
 	query := `
@@ -24,7 +25,7 @@ func CreateRule(db *sql.DB, clientID, name, algorithm string, limit, window int)
 		RETURNING id, client_id, name, algorithm, limit_val, window_seconds, created_at
 	`
 
-	err := db.QueryRow(query, clientID, name, algorithm, limit, window).Scan(
+	err := db.QueryRowContext(ctx, query, clientID, name, algorithm, limit, window).Scan(
 		&rule.ID,
 		&rule.ClientID,
 		&rule.Name,
@@ -40,7 +41,7 @@ func CreateRule(db *sql.DB, clientID, name, algorithm string, limit, window int)
 	return rule, nil
 }
 
-func GetRuleByName(db *sql.DB, clientID, name string) (*Rule, error) {
+func GetRuleByName(ctx context.Context, db *sql.DB, clientID, name string) (*Rule, error) {
 	rule := &Rule{}
 
 	query := `
@@ -49,7 +50,7 @@ func GetRuleByName(db *sql.DB, clientID, name string) (*Rule, error) {
 		WHERE client_id = $1 AND name = $2
 	`
 
-	err := db.QueryRow(query, clientID, name).Scan(
+	err := db.QueryRowContext(ctx, query, clientID, name).Scan(
 		&rule.ID,
 		&rule.ClientID,
 		&rule.Name,
@@ -65,7 +66,7 @@ func GetRuleByName(db *sql.DB, clientID, name string) (*Rule, error) {
 	return rule, nil
 }
 
-func ListRules(db *sql.DB, clientID string) ([]*Rule, error) {
+func ListRules(ctx context.Context, db *sql.DB, clientID string) ([]*Rule, error) {
 	query := `
 		SELECT id, client_id, name, algorithm, limit_val, window_seconds, created_at
 		FROM rules
@@ -73,7 +74,7 @@ func ListRules(db *sql.DB, clientID string) ([]*Rule, error) {
 		ORDER BY created_at ASC
 	`
 
-	rows, err := db.Query(query, clientID)
+	rows, err := db.QueryContext(ctx, query, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +101,9 @@ func ListRules(db *sql.DB, clientID string) ([]*Rule, error) {
 	return rules, nil
 }
 
-func DeleteRule(db *sql.DB, clientID, name string) error {
+func DeleteRule(ctx context.Context, db *sql.DB, clientID, name string) error {
 	var id string
-	err := db.QueryRow(`
+	err := db.QueryRowContext(ctx, `
 		DELETE FROM rules
 		WHERE client_id = $1 AND name = $2
 		RETURNING id

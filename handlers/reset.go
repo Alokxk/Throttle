@@ -34,7 +34,9 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
 	deleted, err := resetIdentifier(ctx, h, client.APIKey, req.Identifier, req.Algorithm)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "Failed to reset identifier", "INTERNAL_ERROR")

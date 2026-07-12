@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -52,7 +53,10 @@ func (h *Handler) CreateExemption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exemption, err := models.CreateExemption(h.DB, client.ID, req.Identifier, req.Reason)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	exemption, err := models.CreateExemption(ctx, h.DB, client.ID, req.Identifier, req.Reason)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
 			httpx.WriteError(w, http.StatusConflict, "Identifier already exempted", "ALREADY_EXEMPTED")
@@ -75,7 +79,10 @@ func (h *Handler) ListExemptions(w http.ResponseWriter, r *http.Request) {
 
 	client := middleware.GetClientFromContext(r)
 
-	exemptions, err := models.ListExemptions(h.DB, client.ID)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	exemptions, err := models.ListExemptions(ctx, h.DB, client.ID)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "Failed to fetch exemptions", "INTERNAL_ERROR")
 		return
@@ -105,7 +112,10 @@ func (h *Handler) DeleteExemption(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := models.DeleteExemption(h.DB, client.ID, identifier)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	err := models.DeleteExemption(ctx, h.DB, client.ID, identifier)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			httpx.WriteError(w, http.StatusNotFound, "Exemption not found", "EXEMPTION_NOT_FOUND")

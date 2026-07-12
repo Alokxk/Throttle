@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -59,7 +60,10 @@ func (h *Handler) CreateRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, err := models.CreateRule(h.DB, client.ID, req.Name, req.Algorithm, req.Limit, req.Window)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	rule, err := models.CreateRule(ctx, h.DB, client.ID, req.Name, req.Algorithm, req.Limit, req.Window)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
 			httpx.WriteError(w, http.StatusConflict, "Rule name already exists", "RULE_EXISTS")
@@ -82,7 +86,10 @@ func (h *Handler) ListRules(w http.ResponseWriter, r *http.Request) {
 
 	client := middleware.GetClientFromContext(r)
 
-	rules, err := models.ListRules(h.DB, client.ID)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	rules, err := models.ListRules(ctx, h.DB, client.ID)
 	if err != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "Failed to fetch rules", "INTERNAL_ERROR")
 		return
@@ -112,7 +119,10 @@ func (h *Handler) DeleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := models.DeleteRule(h.DB, client.ID, name)
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	err := models.DeleteRule(ctx, h.DB, client.ID, name)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			httpx.WriteError(w, http.StatusNotFound, "Rule not found", "RULE_NOT_FOUND")

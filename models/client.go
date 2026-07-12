@@ -1,10 +1,12 @@
 package models
 
 import (
+	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Client struct {
@@ -17,7 +19,7 @@ type Client struct {
 	DefaultAlgorithm string    `json:"default_algorithm"`
 }
 
-func CreateClient(db *sql.DB, name, email, apiKey, keyPrefix, keyHash, defaultAlgorithm string) (*Client, error) {
+func CreateClient(ctx context.Context, db *sql.DB, name, email, apiKey, keyPrefix, keyHash, defaultAlgorithm string) (*Client, error) {
 	client := &Client{}
 
 	query := `
@@ -26,7 +28,7 @@ func CreateClient(db *sql.DB, name, email, apiKey, keyPrefix, keyHash, defaultAl
 		RETURNING id, name, email, created_at, is_active, default_algorithm
 	`
 
-	err := db.QueryRow(query, name, email, apiKey, keyPrefix, keyHash, defaultAlgorithm).Scan(
+	err := db.QueryRowContext(ctx, query, name, email, apiKey, keyPrefix, keyHash, defaultAlgorithm).Scan(
 		&client.ID,
 		&client.Name,
 		&client.Email,
@@ -41,14 +43,14 @@ func CreateClient(db *sql.DB, name, email, apiKey, keyPrefix, keyHash, defaultAl
 	return client, nil
 }
 
-func GetClientByAPIKey(db *sql.DB, apiKey string) (*Client, error) {
+func GetClientByAPIKey(ctx context.Context, db *sql.DB, apiKey string) (*Client, error) {
 	if len(apiKey) < 8 {
 		return nil, sql.ErrNoRows
 	}
 
 	keyPrefix := apiKey[:8]
 
-	rows, err := db.Query(`
+	rows, err := db.QueryContext(ctx, `
 		SELECT id, name, email, api_key, COALESCE(api_key_hash, ''), created_at, is_active, default_algorithm
 		FROM clients
 		WHERE (key_prefix = $1 OR ((key_prefix IS NULL OR key_prefix = '') AND api_key = $2))
@@ -78,7 +80,9 @@ func GetClientByAPIKey(db *sql.DB, apiKey string) (*Client, error) {
 		}
 
 		if storedHash != "" {
-			if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(apiKey)); err == nil {
+			computed := sha256.Sum256([]byte(apiKey))
+			computedHex := hex.EncodeToString(computed[:])
+			if subtle.ConstantTimeCompare([]byte(storedHash), []byte(computedHex)) == 1 {
 				client.APIKey = storedKey
 				return client, nil
 			}

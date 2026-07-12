@@ -21,7 +21,9 @@ func Auth(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		client, err := models.GetClientByAPIKey(db, apiKey)
+		lookupCtx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+		client, err := models.GetClientByAPIKey(lookupCtx, db, apiKey)
+		cancel()
 		if err != nil {
 			if err == sql.ErrNoRows {
 				httpx.WriteError(w, http.StatusUnauthorized, "Invalid API key", "INVALID_API_KEY")

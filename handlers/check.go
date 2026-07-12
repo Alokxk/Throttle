@@ -43,7 +43,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.runCheck(w, client, req, req.Identifier)
+	h.runCheck(w, r, client, req, req.Identifier)
 }
 
 func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
@@ -61,11 +61,14 @@ func (h *Handler) CheckIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.runCheck(w, client, req, ip)
+	h.runCheck(w, r, client, req, ip)
 }
 
-func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req CheckRequest, identifier string) {
-	exempted, exemptErr := models.IsExempted(h.DB, client.ID, identifier)
+func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *models.Client, req CheckRequest, identifier string) {
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	exempted, exemptErr := models.IsExempted(ctx, h.DB, client.ID, identifier)
 	if exemptErr != nil {
 		httpx.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
 		return
@@ -85,7 +88,7 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 	}
 
 	if req.Rule != "" {
-		rule, err := models.GetRuleByName(h.DB, client.ID, req.Rule)
+		rule, err := models.GetRuleByName(ctx, h.DB, client.ID, req.Rule)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				httpx.WriteError(w, http.StatusBadRequest, "Rule not found", "RULE_NOT_FOUND")
@@ -106,7 +109,6 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 		return
 	}
 
-	ctx := context.Background()
 	var result *algorithms.Result
 	var err error
 
@@ -151,8 +153,12 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 	result.Warning = result.Allowed && result.Remaining <= warnAt
 	result.WarnAt = warnAt
 
-	go h.logUsage(client.ID, identifier, req.Algorithm, result.Allowed)
-	go h.incrementStats(client.ID, req.Algorithm, result.Allowed)
+	h.enqueueUsage(usageJob{
+		clientID:   client.ID,
+		identifier: identifier,
+		algorithm:  req.Algorithm,
+		allowed:    result.Allowed,
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-RateLimit-Limit", strconv.Itoa(req.Limit))
@@ -181,7 +187,10 @@ func (h *Handler) runCheck(w http.ResponseWriter, client *models.Client, req Che
 }
 
 func (h *Handler) logUsage(clientID, identifier, algorithm string, allowed bool) {
-	_, err := h.DB.Exec(`
+	ctx, cancel := context.WithTimeout(context.Background(), httpx.RequestTimeout)
+	defer cancel()
+
+	_, err := h.DB.ExecContext(ctx, `
 		INSERT INTO usage_logs (client_id, identifier, algorithm, allowed)
 		VALUES ($1, $2, $3, $4)
 	`, clientID, identifier, algorithm, allowed)
@@ -191,7 +200,9 @@ func (h *Handler) logUsage(clientID, identifier, algorithm string, allowed bool)
 }
 
 func (h *Handler) incrementStats(clientID, algorithm string, allowed bool) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), httpx.RequestTimeout)
+	defer cancel()
+
 	pipe := h.Redis.Client.Pipeline()
 
 	pipe.Incr(ctx, "stats:"+clientID+":total")

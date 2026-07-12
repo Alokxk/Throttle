@@ -31,7 +31,8 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
 
 	total := redisGetInt(h.Redis.Client, ctx, "stats:"+clientID+":total")
 	allowed := redisGetInt(h.Redis.Client, ctx, "stats:"+clientID+":allowed")

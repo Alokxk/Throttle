@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -20,12 +19,9 @@ func main() {
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 	defer redisClient.Client.Close()
 
-	h := &handlers.Handler{
-		DB:    pgDB,
-		Redis: redisClient,
-	}
+	h := handlers.NewHandler(pgDB, redisClient)
 
-	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/health", h.Health)
 	http.HandleFunc("/register", h.Register)
 	http.HandleFunc("/check", middleware.Auth(pgDB, h.Check))
 	http.HandleFunc("/stats/", middleware.Auth(pgDB, h.Stats))
@@ -40,9 +36,4 @@ func main() {
 	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
