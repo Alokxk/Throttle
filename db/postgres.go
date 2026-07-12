@@ -5,11 +5,11 @@ import (
 	"log"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func NewPostgresDB(databaseURL string) *sql.DB {
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}

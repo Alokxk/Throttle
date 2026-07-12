@@ -43,6 +43,20 @@ The bottleneck isn't too much data, running out of connections, missing indexes,
 - The `clients` table only has a handful of rows right now from all our testing today. Right now the auth lookup query does a sequential scan instead of using its index — which is actually the *correct* choice by Postgres for a tiny table, but at real scale (thousands of clients) this could behave differently and is worth re-checking then.
 - We only load-tested from one laptop, so the absolute numbers (2,000-2,900 req/s) are specific to this hardware, not a general "this is Throttle's max throughput" claim.
 
-## What's next
+## The fix, and proof it worked
 
-The likely fix is prepared statements (or a Postgres driver like `pgx` that caches query plans automatically), so Postgres stops re-planning the same two queries every time. Not doing that yet — this file is just the finding, the fix is a separate decision to make.
+Switched the Postgres driver from `lib/pq` to `pgx` (`github.com/jackc/pgx/v5/stdlib`), which caches query plans per connection automatically — no manual prepared-statement code needed, just a driver swap in `db/postgres.go`.
+
+Reset `pg_stat_statements` and ran the exact same fixed-load test again to prove it actually worked, not just assume it did:
+
+| | lib/pq (before) | pgx (after) |
+|---|---|---|
+| Requests handled | 57,144 | 90,209 |
+| Times queries were re-planned | 57,144 (every call) | **150 total** |
+| Total planning CPU-time (both queries) | ~10,258ms | **~112ms** |
+| Throughput | ~2,834 req/s | ~4,500 req/s (+59%) |
+| p95 latency | 168ms | 98ms (-42%) |
+
+The `calls` counter (90,209) and `plans` counter (150) are separate in `pg_stat_statements` — most calls now reuse a cached plan and skip the planner entirely, instead of re-planning on every single request. That's about a 99% cut in planning-related CPU work, while handling more requests than the previous run, not fewer.
+
+Went with `pgx` over manually managing prepared statements ourselves because it fixes this for every current and future query with one driver-level change, and it's the more actively maintained, widely-used Postgres driver in the Go ecosystem today (`lib/pq` is in maintenance-only mode).
