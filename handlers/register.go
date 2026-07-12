@@ -8,11 +8,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"github.com/Alokxk/Throttle/algorithms"
 	"github.com/Alokxk/Throttle/db"
 	"github.com/Alokxk/Throttle/httpx"
 	"github.com/Alokxk/Throttle/models"
+)
+
+// Registration abuse limit: 5 signups per hour per IP. Deliberately low
+// since legitimate registration is a rare, one-time action per client.
+const (
+	registerLimit         = 5
+	registerWindowSeconds = 3600
 )
 
 type Handler struct {
@@ -40,6 +49,21 @@ type RegisterRequest struct {
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpx.WriteError(w, http.StatusMethodNotAllowed, "Method not allowed", "METHOD_NOT_ALLOWED")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
+	defer cancel()
+
+	ip := extractIP(r)
+	limitResult, err := algorithms.FixedWindow(ctx, h.Redis.Client, "register", ip, registerLimit, registerWindowSeconds)
+	if err != nil {
+		httpx.WriteError(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+		return
+	}
+	if !limitResult.Allowed {
+		w.Header().Set("Retry-After", strconv.Itoa(limitResult.RetryAfter))
+		httpx.WriteError(w, http.StatusTooManyRequests, "Too many registration attempts, please try again later", "RATE_LIMITED")
 		return
 	}
 
@@ -76,9 +100,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, http.StatusInternalServerError, "Failed to generate API key", "INTERNAL_ERROR")
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(r.Context(), httpx.RequestTimeout)
-	defer cancel()
 
 	client, err := models.CreateClient(ctx, h.DB, req.Name, req.Email, apiKey, keyPrefix, keyHash, req.DefaultAlgorithm)
 	if err != nil {

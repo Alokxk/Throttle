@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,20 @@ var h *handlers.Handler
 var apiKey string
 var clientID string
 
+// httptest.NewRequest always defaults to the same RemoteAddr, which would
+// make every test run share /register's per-IP rate limit with every other
+// run. A random test-only IP keeps runs independent of each other.
+var testIP = fmt.Sprintf("10.%d.%d.%d", rand.Intn(255), rand.Intn(255), rand.Intn(255))
+
+func newRegisterRequest(body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", testIP)
+	w := httptest.NewRecorder()
+	h.Register(w, req)
+	return w
+}
+
 func TestMain(m *testing.M) {
 	cfg := config.Load()
 
@@ -32,12 +47,7 @@ func TestMain(m *testing.M) {
 }
 
 func setupTestClient() {
-	body := bytes.NewBufferString(`{"name":"test-suite","email":"testsuite@throttle.dev"}`)
-	req := httptest.NewRequest(http.MethodPost, "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	h.Register(w, req)
+	w := newRegisterRequest(`{"name":"test-suite","email":"testsuite@throttle.dev"}`)
 
 	var resp map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&resp)
@@ -82,12 +92,7 @@ func makeCheckRequest(identifier, algorithm string, limit, window int) *httptest
 // Registration tests
 
 func TestRegister_Success(t *testing.T) {
-	body := bytes.NewBufferString(`{"name":"new-app","email":"newapp@throttle.dev"}`)
-	req := httptest.NewRequest(http.MethodPost, "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	h.Register(w, req)
+	w := newRegisterRequest(`{"name":"new-app","email":"newapp@throttle.dev"}`)
 
 	if w.Code != http.StatusCreated && w.Code != http.StatusConflict {
 		t.Errorf("expected 201 or 409, got %d", w.Code)
@@ -95,12 +100,7 @@ func TestRegister_Success(t *testing.T) {
 }
 
 func TestRegister_MissingFields(t *testing.T) {
-	body := bytes.NewBufferString(`{"name":""}`)
-	req := httptest.NewRequest(http.MethodPost, "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	h.Register(w, req)
+	w := newRegisterRequest(`{"name":""}`)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
@@ -108,15 +108,29 @@ func TestRegister_MissingFields(t *testing.T) {
 }
 
 func TestRegister_InvalidEmail(t *testing.T) {
-	body := bytes.NewBufferString(`{"name":"app","email":"notanemail"}`)
-	req := httptest.NewRequest(http.MethodPost, "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	h.Register(w, req)
+	w := newRegisterRequest(`{"name":"app","email":"notanemail"}`)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestRegister_RateLimited(t *testing.T) {
+	ip := fmt.Sprintf("10.%d.%d.%d", rand.Intn(255), rand.Intn(255), rand.Intn(255))
+
+	var lastCode int
+	for i := 0; i < 6; i++ { // registerLimit is 5/hour; the 6th attempt should be rejected
+		body := fmt.Sprintf(`{"name":"rl-test","email":"rl-test-%d-%d@throttle.dev"}`, i, rand.Intn(1_000_000))
+		req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Forwarded-For", ip)
+		w := httptest.NewRecorder()
+		h.Register(w, req)
+		lastCode = w.Code
+	}
+
+	if lastCode != http.StatusTooManyRequests {
+		t.Errorf("expected 429 after exceeding register rate limit, got %d", lastCode)
 	}
 }
 

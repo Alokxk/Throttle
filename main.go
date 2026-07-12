@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/Alokxk/Throttle/config"
 	"github.com/Alokxk/Throttle/db"
@@ -32,8 +36,27 @@ func main() {
 	http.HandleFunc("/exemptions", middleware.Auth(pgDB, h.CreateExemption))
 	http.HandleFunc("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter))
 
-	log.Printf("Server starting on port %s", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, nil); err != nil {
-		log.Fatal(err)
+	server := &http.Server{Addr: ":" + cfg.Port}
+
+	go func() {
+		log.Printf("Server starting on port %s", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	<-ctx.Done()
+
+	log.Println("Shutdown signal received, draining in-flight requests...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("graceful shutdown failed: %v", err)
+	} else {
+		log.Println("Server shut down cleanly")
 	}
 }

@@ -60,3 +60,25 @@ Reset `pg_stat_statements` and ran the exact same fixed-load test again to prove
 The `calls` counter (90,209) and `plans` counter (150) are separate in `pg_stat_statements` — most calls now reuse a cached plan and skip the planner entirely, instead of re-planning on every single request. That's about a 99% cut in planning-related CPU work, while handling more requests than the previous run, not fewer.
 
 Went with `pgx` over manually managing prepared statements ourselves because it fixes this for every current and future query with one driver-level change, and it's the more actively maintained, widely-used Postgres driver in the Go ecosystem today (`lib/pq` is in maintenance-only mode).
+
+## Finding the actual ceiling
+
+Everything above found *a* bottleneck and fixed it, but never answered the original question: where does Throttle actually break? All our tests up to this point topped out at 500 virtual users with 0% failures — we hadn't pushed hard enough to find out.
+
+Ran a much bigger ramp after the pgx fix: 200 → 500 → 1,000 → 2,000 → 4,000 concurrent users over ~110 seconds, isolating the app+databases and the load generator onto separate CPU cores again (same `taskset` technique as before) for a cleaner signal.
+
+**Result:**
+
+| | |
+|---|---|
+| Total requests | 468,808 |
+| Peak throughput | ~4,260 req/s |
+| Failures | 23 (0.005%) |
+| Failure type | Client-side timeouts (10s) — no server errors, no crashes, nothing in the app log |
+| p95 latency at peak | 1.01s (worst case 4.54s) |
+
+**Checked the Postgres-pool-exhaustion hypothesis again** (now that queries are fast, maybe *more* requests could be in flight at once, queuing for one of the 25 pool connections) — watched `pg_stat_activity` for the entire test. Active connections never exceeded **8**, even at the 4,000-VU peak. Ruled out, cleanly, with data, same as the first time. Since each query now takes well under a millisecond, a single connection can service thousands of sequential requests per second, so the pool never comes close to saturating.
+
+We didn't chase the exact next bottleneck (CPU on the app itself vs. Redis) beyond this — diminishing returns given how much ground this load-testing phase already covered, and the actual result is already a strong, complete story: **at roughly 8x more concurrent load than anything tested before, 99.995% of requests still succeeded, and the failures that did happen were timeouts, not crashes.** The system degrades gracefully rather than falling over.
+
+Numbers are specific to this laptop, same caveat as before — not a general "Throttle's max throughput" claim, just what this hardware could sustain.
