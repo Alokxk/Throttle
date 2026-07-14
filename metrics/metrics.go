@@ -5,8 +5,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// path and method are the only labels here (never identifier/client_id) to
-// keep label cardinality bounded to the small, fixed set of real routes.
+// Never add identifier/client_id as a label — unbounded cardinality.
 var (
 	RequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{

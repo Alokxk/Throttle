@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: throttle-scaler
+  namespace: throttle
+spec:
+  scaleTargetRef:
+    name: throttle
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.throttle.svc.cluster.local:9090
+        metricName: throttle_check_p95_latency
+        query: histogram_quantile(0.95, sum(rate(throttle_http_request_duration_seconds_bucket{path="/check"}[2m])) by (le))
+        threshold: "0.2"

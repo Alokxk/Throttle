@@ -18,9 +18,7 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
-// Metrics takes the route pattern explicitly (rather than reading
-// r.URL.Path) so labels stay a small fixed set of real routes, not one
-// label value per identifier/rule name a caller happens to send.
+// path is passed explicitly, not read from r.URL.Path — see metrics.go.
 func Metrics(path string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

@@ -34,6 +34,14 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Liveness only — must never depend on Postgres/Redis, or an outage
+// would restart every pod instead of just marking them unready.
+func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func pingStatus(err error) string {
 	if err != nil {
 		return "down"

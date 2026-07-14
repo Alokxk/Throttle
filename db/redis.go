@@ -60,9 +60,7 @@ func readTokenBucketScript() string {
 	return string(script)
 }
 
-// Reload re-registers the script with Redis and updates the cached SHA.
-// Call this when EVALSHA fails with NOSCRIPT (e.g. after a Redis restart
-// flushed the script cache).
+// Call on EVALSHA NOSCRIPT errors (e.g. after a Redis restart clears the script cache).
 func (r *RedisClient) ReloadTokenBucketScript(ctx context.Context) (string, error) {
 	sha, err := r.Client.ScriptLoad(ctx, r.tokenBucketScript).Result()
 	if err != nil {

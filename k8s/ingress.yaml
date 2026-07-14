@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: throttle
+  namespace: throttle
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: throttle.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: throttle
+                port:
+                  number: 8080

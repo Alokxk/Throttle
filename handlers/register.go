@@ -17,8 +17,6 @@ import (
 	"github.com/Alokxk/Throttle/models"
 )
 
-// Registration abuse limit: 5 signups per hour per IP. Deliberately low
-// since legitimate registration is a rare, one-time action per client.
 const (
 	registerLimit         = 5
 	registerWindowSeconds = 3600

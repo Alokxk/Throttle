@@ -36,6 +36,7 @@ func main() {
 	http.Handle("/metrics", promhttp.Handler())
 
 	http.HandleFunc("/health", middleware.RequestID(middleware.Metrics("/health", h.Health)))
+	http.HandleFunc("/live", middleware.RequestID(middleware.Metrics("/live", h.Live)))
 	http.HandleFunc("/register", middleware.RequestID(middleware.Metrics("/register", h.Register)))
 	http.HandleFunc("/check", middleware.RequestID(middleware.Metrics("/check", middleware.Auth(pgDB, h.Check))))
 	http.HandleFunc("/stats/", middleware.RequestID(middleware.Metrics("/stats/", middleware.Auth(pgDB, h.Stats))))
