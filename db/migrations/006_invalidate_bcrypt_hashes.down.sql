@@ -1,0 +1,2 @@
+-- No-op: the up migration destructively clears bcrypt hashes, which is a
+-- one-way transform. There is no data to restore.

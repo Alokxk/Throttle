@@ -26,6 +26,7 @@ func main() {
 
 	pgDB := db.NewPostgresDB(cfg.DatabaseURL)
 	defer pgDB.Close()
+	db.RunMigrations(pgDB)
 
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 	defer redisClient.Client.Close()

@@ -104,8 +104,8 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 		req.Algorithm = client.DefaultAlgorithm
 	}
 
-	if req.Limit <= 0 {
-		httpx.WriteError(w, http.StatusBadRequest, "Limit must be greater than 0", "INVALID_LIMIT")
+	if code, msg, ok := validateRateLimitParams(req.Algorithm, req.Limit, req.Window); !ok {
+		httpx.WriteError(w, http.StatusBadRequest, msg, code)
 		return
 	}
 
@@ -114,17 +114,9 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 
 	switch req.Algorithm {
 	case "fixed_window":
-		if req.Window <= 0 {
-			httpx.WriteError(w, http.StatusBadRequest, "Window must be greater than 0 for fixed_window", "INVALID_WINDOW")
-			return
-		}
 		result, err = algorithms.FixedWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
 
 	case "sliding_window":
-		if req.Window <= 0 {
-			httpx.WriteError(w, http.StatusBadRequest, "Window must be greater than 0 for sliding_window", "INVALID_WINDOW")
-			return
-		}
 		result, err = algorithms.SlidingWindow(ctx, h.Redis.Client, client.APIKey, identifier, req.Limit, req.Window)
 
 	case "token_bucket":
@@ -133,10 +125,6 @@ func (h *Handler) runCheck(w http.ResponseWriter, r *http.Request, client *model
 			refillRate = float64(req.Limit) / 60.0
 		}
 		result, err = algorithms.TokenBucket(ctx, h.Redis.Client, h.Redis, h.Redis.TokenBucketSHA, client.APIKey, identifier, req.Limit, refillRate)
-
-	default:
-		httpx.WriteError(w, http.StatusBadRequest, "Algorithm must be fixed_window, sliding_window, or token_bucket", "INVALID_ALGORITHM")
-		return
 	}
 
 	if err != nil {

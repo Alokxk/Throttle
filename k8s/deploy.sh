@@ -16,12 +16,6 @@ kubectl apply -f k8s/namespace.yaml
 echo "==> Secrets"
 kubectl apply -f k8s/secret.yaml
 
-echo "==> Postgres migrations (regenerated fresh from db/migrations/ every run)"
-kubectl create configmap postgres-migrations \
-  --from-file=db/migrations/ \
-  --namespace=throttle \
-  --dry-run=client -o yaml | kubectl apply -f -
-
 echo "==> Postgres"
 kubectl apply -f k8s/postgres.yaml
 kubectl wait --namespace throttle --for=condition=ready pod -l app=postgres --timeout=120s

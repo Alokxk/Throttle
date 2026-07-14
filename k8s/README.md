@@ -21,10 +21,11 @@ Everything runs inside the cluster, in its own `throttle` namespace:
 | KEDA + `ScaledObject` | Autoscales `throttle` on p95 `/check` latency | Deliberately **not** CPU-based — load testing showed the app barely uses CPU even under heavy load, so a default CPU trigger would almost never fire |
 | Loki + Promtail | Centralized logs across all replicas | Searching each of up to 6 pods individually via `kubectl logs` doesn't scale; Promtail ships every pod's logs to Loki with labels, one place to search |
 
-Migrations are **not** committed as a static ConfigMap. They're generated fresh
-from [`db/migrations/`](../db/migrations/) every time `deploy.sh` runs, so
-there's no separate file that can silently drift out of sync if someone adds
-a new migration and forgets to regenerate it.
+Migrations aren't a ConfigMap or an init step at all — they're embedded into
+the app binary (`db/migrate.go`, via `go:embed`) and applied automatically
+with [`golang-migrate`](https://github.com/golang-migrate/migrate) before the
+server starts accepting traffic. Same mechanism locally, in `docker-compose`,
+and here — no separate file that can drift out of sync.
 
 ## Prerequisites
 

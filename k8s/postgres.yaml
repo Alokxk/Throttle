@@ -51,8 +51,6 @@ spec:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
               subPath: data
-            - name: migrations
-              mountPath: /docker-entrypoint-initdb.d
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres"]
@@ -67,9 +65,6 @@ spec:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: postgres-data
-        - name: migrations
-          configMap:
-            name: postgres-migrations
 ---
 apiVersion: v1
 kind: Service

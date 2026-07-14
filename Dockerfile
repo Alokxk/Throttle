@@ -1,14 +1,20 @@
-FROM golang:1.24-alpine
+FROM golang:1.24-alpine AS build
 
 WORKDIR /app
-
-RUN apk --no-cache add ca-certificates tzdata
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -ldflags="-w -s" -o throttle .
+RUN CGO_ENABLED=0 go build -ldflags="-w -s" -o throttle .
+
+FROM alpine:latest
+
+WORKDIR /app
+
+RUN apk --no-cache add ca-certificates tzdata
+
+COPY --from=build /app/throttle .
 
 EXPOSE 8080
 

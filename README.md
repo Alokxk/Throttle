@@ -7,6 +7,8 @@ Rate limiting as a service — Token Bucket, Sliding Window, and Fixed Window al
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7+-DC382D?style=flat&logo=redis&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-336791?style=flat&logo=postgresql&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?style=flat&logo=kubernetes&logoColor=white)
+![Prometheus](https://img.shields.io/badge/Prometheus-metrics-E6522C?style=flat&logo=prometheus&logoColor=white)
 
 ## What is Throttle
 
@@ -86,7 +88,13 @@ cd Throttle
 docker-compose up --build
 ```
 
-PostgreSQL, Redis, and the server start together. Migrations run automatically.
+Starts Postgres, Redis, the server, and a Prometheus + Grafana stack. The
+server applies schema migrations automatically on startup — see
+[Migrations](#migrations) below.
+
+- App: `http://localhost:8080`
+- Grafana: `http://localhost:3000` (login `admin`/`admin`, dashboard pre-provisioned)
+- Prometheus: `http://localhost:9090`
 
 ### Option 2 — Manual setup
 
@@ -108,17 +116,30 @@ DATABASE_URL=postgresql://postgres:postgres@localhost/throttle?sslmode=disable
 REDIS_URL=redis://localhost:6379/0
 ```
 
-Create the database and run migrations:
+Create the database (migrations apply automatically on startup):
 
 ```bash
 make createdb
-make migrate
+make run
 ```
 
-Start the server:
+### Migrations
+
+Schema migrations live in [`db/migrations/`](db/migrations/) and are embedded
+directly into the compiled binary (`db/migrate.go`, via `go:embed`). The app
+applies any pending migrations with
+[golang-migrate](https://github.com/golang-migrate/migrate) before it starts
+accepting traffic — the same mechanism locally, in Docker Compose, and in
+Kubernetes, so there's no separate init-script path that can drift out of sync.
+
+For manual control — checking the current version or rolling back a step —
+install the CLI and use the Makefile targets:
 
 ```bash
-make run
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+make migrate-up    # apply all pending migrations
+make migrate-down  # roll back the last migration
 ```
 
 ### Makefile commands
@@ -126,7 +147,7 @@ make run
 - `make run` — Start the server
 - `make build` — Compile the binary
 - `make test` — Run all tests
-- `make migrate` — Run database migrations
+- `make migrate-up` / `make migrate-down` — Manually apply/roll back migrations (the server already does this automatically on startup)
 - `make docker-up` — Start with Docker Compose
 - `make docker-down` — Stop Docker Compose
 
@@ -135,6 +156,7 @@ make run
 - Language: Go 1.24 — standard library HTTP server, no framework
 - Rate limit state: Redis — atomic `INCR`, sorted sets, Lua scripts
 - Client storage: PostgreSQL — registration, rules, exemptions
+- Migrations: golang-migrate, embedded in the binary, applied automatically on boot
 - Algorithms: Fixed window, sliding window, token bucket
 
 **Why Go's standard library over Gin/Echo:** Forces explicit understanding of how HTTP works. No magic — every line is intentional.
@@ -142,6 +164,21 @@ make run
 **Why Redis for counters:** `INCR` is atomic. Two servers checking the same counter simultaneously will always get consistent results. Sub-millisecond latency keeps rate checks off the critical path.
 
 **Why PostgreSQL for clients only:** Rules and client data are relational, written once, read often. Redis handles the hot path; PostgreSQL handles the cold path.
+
+## Observability & deployment
+
+**Structured logging** — every log line is JSON (`log/slog`) and carries a `request_id`, also returned as the `X-Request-ID` response header, so a single request can be traced end to end through the logs.
+
+**Metrics** — `/metrics` exposes Prometheus counters and histograms: request latency by path/method/status, in-flight requests, DB connection pool stats. A provisioned Grafana dashboard ships in [`grafana/`](grafana/) (see Docker Compose above).
+
+**Load testing** — pushed with k6 to the actual breaking point, not just a target RPS. Full methodology, the bottleneck found, and the fix are in [`loadtest/FINDINGS.md`](loadtest/FINDINGS.md).
+
+**Kubernetes** — a full deployment to a local `kind` cluster: readiness/liveness probes, persistent storage for Postgres, Secrets, Ingress, and:
+
+- **Autoscaling via [KEDA](https://keda.sh)** on p95 `/check` latency, not CPU — load testing showed the app barely uses CPU even under heavy load, so a default CPU trigger would rarely fire
+- **Centralized logs via Loki + Promtail** — every replica's logs in one place, labeled by pod, instead of `kubectl logs` per pod
+
+See [`k8s/README.md`](k8s/README.md) for the architecture, setup, and usage.
 
 ## API reference
 
@@ -394,5 +431,3 @@ curl http://localhost:8080/stats/550e8400-e29b-41d4-a716-446655440000 \
 **Functional tests, not integration tests** — Tests run against real local PostgreSQL and Redis. True integration tests would spin up isolated containers per test run using `testcontainers-go`.
 
 **Sliding window is an approximation** — Uses a weighted average across two windows rather than tracking every request timestamp. Accurate enough for production use but not mathematically exact.
-
-**No request timeouts** — Database calls don't have context deadlines. Under extreme load, slow database responses could cause requests to hang.

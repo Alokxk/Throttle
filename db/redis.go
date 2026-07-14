@@ -4,9 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"runtime"
 
+	"github.com/Alokxk/Throttle/algorithms"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -33,8 +32,7 @@ func NewRedisClient(redisURL string) *RedisClient {
 
 	slog.Info("redis connected")
 
-	script := readTokenBucketScript()
-	sha, err := client.ScriptLoad(ctx, script).Result()
+	sha, err := client.ScriptLoad(ctx, algorithms.TokenBucketScript).Result()
 	if err != nil {
 		slog.Error("failed to load token bucket script into Redis", "error", err)
 		os.Exit(1)
@@ -44,20 +42,8 @@ func NewRedisClient(redisURL string) *RedisClient {
 	return &RedisClient{
 		Client:            client,
 		TokenBucketSHA:    sha,
-		tokenBucketScript: script,
+		tokenBucketScript: algorithms.TokenBucketScript,
 	}
-}
-
-func readTokenBucketScript() string {
-	_, filename, _, _ := runtime.Caller(0)
-	scriptPath := filepath.Join(filepath.Dir(filename), "..", "algorithms", "scripts", "token_bucket.lua")
-
-	script, err := os.ReadFile(scriptPath)
-	if err != nil {
-		slog.Error("failed to read token bucket Lua script", "error", err)
-		os.Exit(1)
-	}
-	return string(script)
 }
 
 // Call on EVALSHA NOSCRIPT errors (e.g. after a Redis restart clears the script cache).
