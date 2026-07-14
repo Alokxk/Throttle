@@ -7,12 +7,20 @@ services:
       - PORT=8080
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/throttle?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
+      - CORS_ALLOWED_ORIGIN=http://localhost:5173
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "5173:80"
+    depends_on:
+      - app
 
   postgres:
     image: postgres:14-alpine

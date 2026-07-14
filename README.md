@@ -1,14 +1,16 @@
-# Throttle
-
-Rate limiting as a service — Token Bucket, Sliding Window, and Fixed Window algorithms backed by Redis atomic operations.
-
-![Throttle](assets/throttle-dark.png)
+<div align="center">
+  <img src="assets/logo.png" width="72" height="72" alt="Throttle" />
+  <p>Rate limiting as a service.<br/>Token Bucket, Sliding Window, and Fixed Window algorithms backed by Redis atomic operations.</p>
 
 ![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7+-DC382D?style=flat&logo=redis&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-336791?style=flat&logo=postgresql&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-ready-326CE5?style=flat&logo=kubernetes&logoColor=white)
 ![Prometheus](https://img.shields.io/badge/Prometheus-metrics-E6522C?style=flat&logo=prometheus&logoColor=white)
+
+</div>
+
+![Throttle](assets/throttle-dark.png)
 
 ## What is Throttle
 
@@ -88,11 +90,12 @@ cd Throttle
 docker-compose up --build
 ```
 
-Starts Postgres, Redis, the server, and a Prometheus + Grafana stack. The
-server applies schema migrations automatically on startup — see
-[Migrations](#migrations) below.
+Starts Postgres, Redis, the server, an operator dashboard, and a Prometheus +
+Grafana stack. The server applies schema migrations automatically on
+startup — see [Migrations](#migrations) below.
 
 - App: `http://localhost:8080`
+- Dashboard: `http://localhost:5173` — usage stats, rules, and exemptions for a client (paste in an API key from `/register`); see [`dashboard/README.md`](dashboard/README.md)
 - Grafana: `http://localhost:3000` (login `admin`/`admin`, dashboard pre-provisioned)
 - Prometheus: `http://localhost:9090`
 
@@ -170,6 +173,8 @@ make migrate-down  # roll back the last migration
 **Structured logging** — every log line is JSON (`log/slog`) and carries a `request_id`, also returned as the `X-Request-ID` response header, so a single request can be traced end to end through the logs.
 
 **Metrics** — `/metrics` exposes Prometheus counters and histograms: request latency by path/method/status, in-flight requests, DB connection pool stats. A provisioned Grafana dashboard ships in [`grafana/`](grafana/) (see Docker Compose above).
+
+**Dashboard** — a React + Tailwind operator UI in [`dashboard/`](dashboard/): live usage stats, rule and exemption management, authenticated the same way any API caller is (an API key). Thin client over the existing REST endpoints, nothing new on the backend beyond CORS and a `/me` whoami route.
 
 **Load testing** — pushed with k6 to the actual breaking point, not just a target RPS. Full methodology, the bottleneck found, and the fix are in [`loadtest/FINDINGS.md`](loadtest/FINDINGS.md).
 
@@ -426,7 +431,7 @@ curl http://localhost:8080/stats/550e8400-e29b-41d4-a716-446655440000 \
 
 ## Known limitations
 
-**Single Redis instance** — A single point of failure. Production deployments should use Redis Sentinel for automatic failover or Redis Cluster for horizontal scaling.
+**Single Redis instance is a single point of failure** — every algorithm depends on it, so if it goes down, `/check` goes down even though the app itself is horizontally scaled and autoscaling behind it. This is a deliberate tradeoff, not an oversight: closing it properly means Redis Sentinel (or Cluster), which in Kubernetes means a `StatefulSet` with Redis+Sentinel sidecars, hostname-based master/replica role selection, and Sentinel's own config-rewrite-on-failover behavior — real operational complexity that wasn't worth hand-rolling for a single local `kind` cluster with no actual uptime requirement. A real production deployment would reach for a managed Redis with built-in HA (ElastiCache, Memorystore) instead of self-hosting Sentinel.
 
 **Functional tests, not integration tests** — Tests run against real local PostgreSQL and Redis. True integration tests would spin up isolated containers per test run using `testcontainers-go`.
 

@@ -1,7 +1,8 @@
 import http from 'k6/http';
 import { check } from 'k6';
+import type { Options } from 'k6/options';
 
-export const options = {
+export const options: Options = {
   stages: [
     { duration: '15s', target: 200 },
     { duration: '20s', target: 500 },
@@ -12,7 +13,7 @@ export const options = {
   ],
 };
 
-const API_KEY = __ENV.API_KEY;
+const API_KEY: string = __ENV.API_KEY;
 
 export default function () {
   const identifier = `loadtest_${__VU}_${__ITER}`;

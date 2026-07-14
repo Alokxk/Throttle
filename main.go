@@ -36,17 +36,22 @@ func main() {
 	prometheus.MustRegister(collectors.NewDBStatsCollector(pgDB, "throttle"))
 	http.Handle("/metrics", promhttp.Handler())
 
-	http.HandleFunc("/health", middleware.RequestID(middleware.Metrics("/health", h.Health)))
-	http.HandleFunc("/live", middleware.RequestID(middleware.Metrics("/live", h.Live)))
-	http.HandleFunc("/register", middleware.RequestID(middleware.Metrics("/register", h.Register)))
-	http.HandleFunc("/check", middleware.RequestID(middleware.Metrics("/check", middleware.Auth(pgDB, h.Check))))
-	http.HandleFunc("/stats/", middleware.RequestID(middleware.Metrics("/stats/", middleware.Auth(pgDB, h.Stats))))
-	http.HandleFunc("/rules", middleware.RequestID(middleware.Metrics("/rules", middleware.Auth(pgDB, h.CreateRule))))
-	http.HandleFunc("/rules/", middleware.RequestID(middleware.Metrics("/rules/", middleware.Auth(pgDB, h.RulesRouter))))
-	http.HandleFunc("/check/ip", middleware.RequestID(middleware.Metrics("/check/ip", middleware.Auth(pgDB, h.CheckIP))))
-	http.HandleFunc("/reset", middleware.RequestID(middleware.Metrics("/reset", middleware.Auth(pgDB, h.Reset))))
-	http.HandleFunc("/exemptions", middleware.RequestID(middleware.Metrics("/exemptions", middleware.Auth(pgDB, h.CreateExemption))))
-	http.HandleFunc("/exemptions/", middleware.RequestID(middleware.Metrics("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter))))
+	cors := func(path string, next http.HandlerFunc) http.HandlerFunc {
+		return middleware.CORS(cfg.CORSAllowedOrigin, middleware.RequestID(middleware.Metrics(path, next)))
+	}
+
+	http.HandleFunc("/health", cors("/health", h.Health))
+	http.HandleFunc("/live", cors("/live", h.Live))
+	http.HandleFunc("/register", cors("/register", h.Register))
+	http.HandleFunc("/me", cors("/me", middleware.Auth(pgDB, h.Me)))
+	http.HandleFunc("/check", cors("/check", middleware.Auth(pgDB, h.Check)))
+	http.HandleFunc("/stats/", cors("/stats/", middleware.Auth(pgDB, h.Stats)))
+	http.HandleFunc("/rules", cors("/rules", middleware.Auth(pgDB, h.CreateRule)))
+	http.HandleFunc("/rules/", cors("/rules/", middleware.Auth(pgDB, h.RulesRouter)))
+	http.HandleFunc("/check/ip", cors("/check/ip", middleware.Auth(pgDB, h.CheckIP)))
+	http.HandleFunc("/reset", cors("/reset", middleware.Auth(pgDB, h.Reset)))
+	http.HandleFunc("/exemptions", cors("/exemptions", middleware.Auth(pgDB, h.CreateExemption)))
+	http.HandleFunc("/exemptions/", cors("/exemptions/", middleware.Auth(pgDB, h.ExemptionsRouter)))
 
 	server := &http.Server{Addr: ":" + cfg.Port}
 

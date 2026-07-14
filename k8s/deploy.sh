@@ -27,7 +27,11 @@ kubectl wait --namespace throttle --for=condition=ready pod -l app=redis --timeo
 echo "==> Throttle app"
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
-kubectl wait --namespace throttle --for=condition=ready pod -l app=throttle --timeout=120s
+# imagePullPolicy is Never and the tag never changes, so a rebuilt image with
+# identical deployment.yaml text produces zero diff for `apply` to act on —
+# force a rollout so pods actually pick up the freshly loaded image.
+kubectl rollout restart deployment/throttle --namespace throttle
+kubectl rollout status deployment/throttle --namespace throttle --timeout=120s
 
 echo "==> Ingress controller (installs once, safe to re-run)"
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml

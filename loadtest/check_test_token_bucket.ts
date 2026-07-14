@@ -1,20 +1,21 @@
 import http from 'k6/http';
 import { check } from 'k6';
+import type { Options } from 'k6/options';
 
-export const options = {
+export const options: Options = {
   vus: 200,
   duration: '20s',
 };
 
-const API_KEY = __ENV.API_KEY;
+const API_KEY: string = __ENV.API_KEY;
 
 export default function () {
   const identifier = `loadtest_${__VU}_${__ITER}`;
   const payload = JSON.stringify({
     identifier: identifier,
     limit: 1000000,
-    window: 60,
-    algorithm: 'fixed_window',
+    refill_rate: 100000,
+    algorithm: 'token_bucket',
   });
 
   const res = http.post('http://localhost:8080/check', payload, {

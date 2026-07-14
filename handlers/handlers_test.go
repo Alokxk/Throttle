@@ -353,7 +353,6 @@ func TestCheckWithRule(t *testing.T) {
 	w := httptest.NewRecorder()
 	middleware.Auth(h.DB, h.CreateRule)(w, req)
 
-	w = makeCheckRequest("rule_check_user", "fixed_window", 5, 60)
 	checkBody := bytes.NewBufferString(`{"identifier":"rule_user","rule":"suite_rule"}`)
 	req = httptest.NewRequest(http.MethodPost, "/check", checkBody)
 	req.Header.Set("Content-Type", "application/json")

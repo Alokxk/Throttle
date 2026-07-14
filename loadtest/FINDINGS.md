@@ -4,7 +4,7 @@ We wanted to find out what actually breaks first when Throttle gets a lot of tra
 
 ## What we tested
 
-Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute, and also steady 200-user runs for 20 seconds each. Every request used a unique identifier so we weren't just hammering one Redis key.
+Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute ([`check_test.ts`](check_test.ts)), and also steady 200-user runs for 20 seconds each ([`check_test_fixed.ts`](check_test_fixed.ts)). Every request used a unique identifier so we weren't just hammering one Redis key.
 
 ## What we found
 
@@ -25,7 +25,7 @@ Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute, 
 
 - **Bonus finding we weren't looking for:** `pg_stat_statements` also showed a third, hidden query — a Postgres-internal check that runs whenever `usage_logs` inserts a row (since it has a foreign key pointing at `clients`). It only ran 6,328 times out of 57,144 requests, about 11%. That's hard proof that our bounded worker pool (10 workers, queue of 1000, added back in Phase 0) is dropping roughly 89% of usage/stats records at this load level — exactly the "usage job queue full, dropping" behavior we saw in the logs earlier, now confirmed with real numbers instead of just log lines.
 
-- **Compared fixed_window against token_bucket** under the same fixed 200-user load: nearly identical latency (fixed_window avg 70ms / p95 168ms vs token_bucket avg 67ms / p95 153ms — token_bucket was actually a touch faster, well within normal noise). This tells us the algorithm itself (simple `INCR` vs a Lua script round trip) barely matters here — Postgres dominates the cost regardless of which rate-limiting algorithm runs. Didn't bother testing sliding_window separately since it uses the same kind of simple Redis calls as fixed_window and would very likely show the same thing.
+- **Compared fixed_window against token_bucket** ([`check_test_token_bucket.ts`](check_test_token_bucket.ts)) under the same fixed 200-user load: nearly identical latency (fixed_window avg 70ms / p95 168ms vs token_bucket avg 67ms / p95 153ms — token_bucket was actually a touch faster, well within normal noise). This tells us the algorithm itself (simple `INCR` vs a Lua script round trip) barely matters here — Postgres dominates the cost regardless of which rate-limiting algorithm runs. Didn't bother testing sliding_window separately since it uses the same kind of simple Redis calls as fixed_window and would very likely show the same thing.
 
 ## Bottom line
 
@@ -65,7 +65,7 @@ Went with `pgx` over manually managing prepared statements ourselves because it 
 
 Everything above found *a* bottleneck and fixed it, but never answered the original question: where does Throttle actually break? All our tests up to this point topped out at 500 virtual users with 0% failures — we hadn't pushed hard enough to find out.
 
-Ran a much bigger ramp after the pgx fix: 200 → 500 → 1,000 → 2,000 → 4,000 concurrent users over ~110 seconds, isolating the app+databases and the load generator onto separate CPU cores again (same `taskset` technique as before) for a cleaner signal.
+Ran a much bigger ramp after the pgx fix ([`check_test_breaking_point.ts`](check_test_breaking_point.ts)): 200 → 500 → 1,000 → 2,000 → 4,000 concurrent users over ~110 seconds, isolating the app+databases and the load generator onto separate CPU cores again (same `taskset` technique as before) for a cleaner signal.
 
 **Result:**
 
@@ -82,3 +82,75 @@ Ran a much bigger ramp after the pgx fix: 200 → 500 → 1,000 → 2,000 → 4,
 We didn't chase the exact next bottleneck (CPU on the app itself vs. Redis) beyond this — diminishing returns given how much ground this load-testing phase already covered, and the actual result is already a strong, complete story: **at roughly 8x more concurrent load than anything tested before, 99.995% of requests still succeeded, and the failures that did happen were timeouts, not crashes.** The system degrades gracefully rather than falling over.
 
 Numbers are specific to this laptop, same caveat as before — not a general "Throttle's max throughput" claim, just what this hardware could sustain.
+
+## Does the Kubernetes autoscaler actually help?
+
+Everything above was a single instance, run locally. Once the app was deployed to Kubernetes with KEDA scaling `throttle` between 2 and 6 replicas on p95 `/check` latency (see [`k8s/README.md`](../k8s/README.md)), the obvious next question was whether autoscaling actually improves anything under load, or whether it's just a checkbox that "works" in `kubectl get hpa` without being proven.
+
+### First pass: a combined ramp, watched live
+
+Ran [`k8s_autoscale_test.ts`](k8s_autoscale_test.ts) through the cluster's Ingress — 150 → 400 VUs, held for 6 minutes — while polling replica count and the live p95 metric every 5 seconds.
+
+| | |
+|---|---|
+| Total requests | 412,819 |
+| Success rate | 99.07% |
+| p95 latency (whole test) | 996.92ms |
+| Replicas | 2 → 4 → 5 → 6 over the course of the test |
+
+KEDA reacted for real: replica count climbed step by step as the live p95 metric crossed the 200ms threshold, confirming the scaler is actually wired to real latency data, not just present in the manifest. But a single combined run doesn't answer the actual question — is the app *better off* with autoscaling than without, under the same load? That needs a controlled comparison, not one number.
+
+### A controlled comparison — and a worse result than expected
+
+Wrote [`k8s_fixed_load.ts`](k8s_fixed_load.ts): a steady 400 VUs for 3 minutes, no ramp, so the only variable between runs is whether KEDA is allowed to scale.
+
+**Run A — pinned at 2 replicas, KEDA disabled:**
+
+| | |
+|---|---|
+| Requests | 218,692 |
+| Failures | 1 (0.00%) |
+| p95 latency | 822ms |
+| Throughput | 1,066 req/s |
+
+**Run B — same load, KEDA enabled (2→6 replicas):**
+
+| | |
+|---|---|
+| Requests | 185,249 |
+| Failures | 2,768 (1.49%) |
+| p95 latency | 1.17s |
+| Throughput | 899 req/s |
+
+Autoscaling made it *worse* — higher latency, real failures where there'd been none, lower throughput despite four extra replicas. That's the opposite of the expected result, so instead of assuming a fluke, we checked why.
+
+### Root-causing it, not guessing
+
+`kubectl get pods` showed two of the newly-scaled replicas with nonzero restart counts. Their previous-container logs had the answer immediately:
+
+```
+failed to connect to database: ... server error: FATAL: sorry, too many clients already (SQLSTATE 53300)
+```
+
+Postgres's default `max_connections` is 100 (confirmed with `SHOW max_connections`). The app's connection pool was set to 25 per replica (`db.SetMaxOpenConns(25)` in `db/postgres.go`) — fine for a single instance, and exactly why the earlier single-instance breaking-point test above ruled out pool exhaustion (active connections there never exceeded 8). But that reasoning doesn't carry over to multiple replicas: each one opens its *own* independent pool against the *same* Postgres instance. At KEDA's `maxReplicaCount: 6`, worst case is 6 × 25 = 150 possible connections against a server that only accepts 100. New pods scaling up under load hit that ceiling, failed their startup `Ping()`, and crash-looped instead of serving traffic — which explains both the failures and the latency spike (fewer healthy replicas than `kubectl get pods` suggested, plus the overhead of repeated crash-restarts competing for CPU on the same node).
+
+### The fix, and proof it worked
+
+Reduced the per-replica pool to 15 (`db.SetMaxOpenConns(15)`): 15 × 6 = 90, leaving headroom under Postgres's 100-connection ceiling for its own reserved connections and manual `psql` access.
+
+Rebuilt, redeployed, and re-ran the identical Run B scenario:
+
+**Run C — same load, KEDA enabled, pool fix applied:**
+
+| | |
+|---|---|
+| Requests | 246,089 |
+| Failures | 0 (0.00%) |
+| p95 latency | 741.57ms |
+| Throughput | 1,199 req/s |
+
+Zero failures, and better than *both* earlier runs on every metric — lower p95 than the pinned baseline (741ms vs. 822ms) and higher throughput than either (1,199 req/s vs. 1,066 pinned / 899 buggy-autoscaled). Autoscaling now does what it's supposed to.
+
+### Bottom line
+
+Autoscaling isn't free of its own failure modes — scaling *up* successfully at the Kubernetes level doesn't mean the new replicas can actually do useful work, if a shared downstream dependency has a hard ceiling that per-replica configuration doesn't account for. A connection pool sized correctly for one instance can silently become wrong the moment replica count becomes dynamic. The fix was one line, but finding it required not trusting the first (worse) result and actually reading the crashed pods' logs instead of assuming autoscaling was "working" because `kubectl get hpa` said so.

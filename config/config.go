@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	RedisURL    string
+	Port              string
+	DatabaseURL       string
+	RedisURL          string
+	CORSAllowedOrigin string
 }
 
 func Load() *Config {
@@ -39,9 +40,15 @@ func Load() *Config {
 		os.Exit(1)
 	}
 
+	corsAllowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+	if corsAllowedOrigin == "" {
+		corsAllowedOrigin = "http://localhost:5173"
+	}
+
 	return &Config{
-		Port:        port,
-		DatabaseURL: databaseURL,
-		RedisURL:    redisURL,
+		Port:              port,
+		DatabaseURL:       databaseURL,
+		RedisURL:          redisURL,
+		CORSAllowedOrigin: corsAllowedOrigin,
 	}
 }

@@ -18,7 +18,7 @@ Everything runs inside the cluster, in its own `throttle` namespace:
 | `throttle-secrets` Secret | DB connection strings | Keeps credentials out of the Deployment specs. Note: these are local dev placeholder credentials (same values already public in `docker-compose.yml`) — a real production setup would inject secrets via a cloud KMS or Sealed Secrets, never commit them as plain `stringData` like this file does |
 | `Ingress` (nginx) | Routes `throttle.local` → the app | Only way to reach the app from outside the cluster; without it you're limited to `kubectl exec`/debug pods |
 | `prometheus` (in-cluster) | Scrapes the K8s app's `/metrics` | Separate from the `docker-compose` Prometheus, which watches the locally-run app instead — two workflows, each with its own observability, same reasoning as Postgres/Redis above |
-| KEDA + `ScaledObject` | Autoscales `throttle` on p95 `/check` latency | Deliberately **not** CPU-based — load testing showed the app barely uses CPU even under heavy load, so a default CPU trigger would almost never fire |
+| KEDA + `ScaledObject` | Autoscales `throttle` on p95 `/check` latency | Deliberately **not** CPU-based — load testing showed the app barely uses CPU even under heavy load, so a default CPU trigger would almost never fire. Proven with a controlled before/after load test, which also caught a real connection-pool bug — see [`loadtest/FINDINGS.md`](../loadtest/FINDINGS.md#does-the-kubernetes-autoscaler-actually-help) |
 | Loki + Promtail | Centralized logs across all replicas | Searching each of up to 6 pods individually via `kubectl logs` doesn't scale; Promtail ships every pod's logs to Loki with labels, one place to search |
 
 Migrations aren't a ConfigMap or an init step at all — they're embedded into
