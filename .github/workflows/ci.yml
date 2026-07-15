@@ -49,12 +49,6 @@ jobs:
         with:
           go-version: "1.24.3"
 
-      - name: Run database migrations
-        run: |
-          for f in db/migrations/*.sql; do
-            PGPASSWORD=postgres psql -h localhost -U postgres -d throttle -f "$f"
-          done
-
       - name: Build
         run: go build ./...
 

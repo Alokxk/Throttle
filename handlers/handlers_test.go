@@ -38,6 +38,7 @@ func TestMain(m *testing.M) {
 	cfg := config.Load()
 
 	pgDB := db.NewPostgresDB(cfg.DatabaseURL)
+	db.RunMigrations(pgDB)
 	redisClient := db.NewRedisClient(cfg.RedisURL)
 
 	h = handlers.NewHandler(pgDB, redisClient)
