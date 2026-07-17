@@ -4,7 +4,7 @@ We wanted to find out what actually breaks first when Throttle gets a lot of tra
 
 ## What we tested
 
-Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute ([`check_test.ts`](check_test.ts)), and also steady 200-user runs for 20 seconds each ([`check_test_fixed.ts`](check_test_fixed.ts)). Every request used a unique identifier so we weren't just hammering one Redis key.
+Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute ([`check_test.js`](check_test.js)), and also steady 200-user runs for 20 seconds each ([`check_test_fixed.js`](check_test_fixed.js)). Every request used a unique identifier so we weren't just hammering one Redis key.
 
 ## What we found
 
@@ -25,7 +25,7 @@ Hit `/check` with k6, ramping from 50 up to 500 concurrent users over a minute (
 
 - **Bonus finding we weren't looking for:** `pg_stat_statements` also showed a third, hidden query — a Postgres-internal check that runs whenever `usage_logs` inserts a row (since it has a foreign key pointing at `clients`). It only ran 6,328 times out of 57,144 requests, about 11%. That's hard proof that our bounded worker pool (10 workers, queue of 1000, added back in Phase 0) is dropping roughly 89% of usage/stats records at this load level — exactly the "usage job queue full, dropping" behavior we saw in the logs earlier, now confirmed with real numbers instead of just log lines.
 
-- **Compared fixed_window against token_bucket** ([`check_test_token_bucket.ts`](check_test_token_bucket.ts)) under the same fixed 200-user load: nearly identical latency (fixed_window avg 70ms / p95 168ms vs token_bucket avg 67ms / p95 153ms — token_bucket was actually a touch faster, well within normal noise). This tells us the algorithm itself (simple `INCR` vs a Lua script round trip) barely matters here — Postgres dominates the cost regardless of which rate-limiting algorithm runs. Didn't bother testing sliding_window separately since it uses the same kind of simple Redis calls as fixed_window and would very likely show the same thing.
+- **Compared fixed_window against token_bucket** ([`check_test_token_bucket.js`](check_test_token_bucket.js)) under the same fixed 200-user load: nearly identical latency (fixed_window avg 70ms / p95 168ms vs token_bucket avg 67ms / p95 153ms — token_bucket was actually a touch faster, well within normal noise). This tells us the algorithm itself (simple `INCR` vs a Lua script round trip) barely matters here — Postgres dominates the cost regardless of which rate-limiting algorithm runs. Didn't bother testing sliding_window separately since it uses the same kind of simple Redis calls as fixed_window and would very likely show the same thing.
 
 ## Bottom line
 
@@ -65,7 +65,7 @@ Went with `pgx` over manually managing prepared statements ourselves because it 
 
 Everything above found *a* bottleneck and fixed it, but never answered the original question: where does Throttle actually break? All our tests up to this point topped out at 500 virtual users with 0% failures — we hadn't pushed hard enough to find out.
 
-Ran a much bigger ramp after the pgx fix ([`check_test_breaking_point.ts`](check_test_breaking_point.ts)): 200 → 500 → 1,000 → 2,000 → 4,000 concurrent users over ~110 seconds, isolating the app+databases and the load generator onto separate CPU cores again (same `taskset` technique as before) for a cleaner signal.
+Ran a much bigger ramp after the pgx fix ([`check_test_breaking_point.js`](check_test_breaking_point.js)): 200 → 500 → 1,000 → 2,000 → 4,000 concurrent users over ~110 seconds, isolating the app+databases and the load generator onto separate CPU cores again (same `taskset` technique as before) for a cleaner signal.
 
 **Result:**
 
@@ -89,7 +89,7 @@ Everything above was a single instance, run locally. Once the app was deployed t
 
 ### First pass: a combined ramp, watched live
 
-Ran [`k8s_autoscale_test.ts`](k8s_autoscale_test.ts) through the cluster's Ingress — 150 → 400 VUs, held for 6 minutes — while polling replica count and the live p95 metric every 5 seconds.
+Ran [`k8s_autoscale_test.js`](k8s_autoscale_test.js) through the cluster's Ingress — 150 → 400 VUs, held for 6 minutes — while polling replica count and the live p95 metric every 5 seconds.
 
 | | |
 |---|---|
@@ -102,7 +102,7 @@ KEDA reacted for real: replica count climbed step by step as the live p95 metric
 
 ### A controlled comparison — and a worse result than expected
 
-Wrote [`k8s_fixed_load.ts`](k8s_fixed_load.ts): a steady 400 VUs for 3 minutes, no ramp, so the only variable between runs is whether KEDA is allowed to scale.
+Wrote [`k8s_fixed_load.js`](k8s_fixed_load.js): a steady 400 VUs for 3 minutes, no ramp, so the only variable between runs is whether KEDA is allowed to scale.
 
 **Run A — pinned at 2 replicas, KEDA disabled:**
 

@@ -1,68 +1,68 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { api, ApiError, type Rule } from '../lib/api'
+import { useEffect, useState, type FormEvent } from "react";
+import { api, ApiError, type Rule } from "../lib/api";
 
 interface RulesProps {
-  apiKey: string
+  apiKey: string;
 }
 
-const ALGORITHMS = ['fixed_window', 'sliding_window', 'token_bucket']
+const ALGORITHMS = ["fixed_window", "sliding_window", "token_bucket"];
 
 const inputClass =
-  'rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100'
+  "rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
 
 export function Rules({ apiKey }: RulesProps) {
-  const [rules, setRules] = useState<Rule[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState('')
-  const [algorithm, setAlgorithm] = useState(ALGORITHMS[0])
-  const [limit, setLimit] = useState('100')
-  const [window, setWindow] = useState('60')
-  const [submitting, setSubmitting] = useState(false)
+  const [name, setName] = useState("");
+  const [algorithm, setAlgorithm] = useState(ALGORITHMS[0]);
+  const [limit, setLimit] = useState("100");
+  const [window, setWindow] = useState("60");
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     try {
-      setRules(await api.listRules(apiKey))
-      setError(null)
+      setRules(await api.listRules(apiKey));
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load rules')
+      setError(err instanceof ApiError ? err.message : "Failed to load rules");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    refresh()
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   async function handleCreate(e: FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError(null)
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
       await api.createRule(apiKey, {
         name: name.trim(),
         algorithm,
         limit: Number(limit),
-        window: algorithm === 'token_bucket' ? 0 : Number(window),
-      })
-      setName('')
-      await refresh()
+        window: algorithm === "token_bucket" ? 0 : Number(window),
+      });
+      setName("");
+      await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create rule')
+      setError(err instanceof ApiError ? err.message : "Failed to create rule");
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   async function handleDelete(ruleName: string) {
     try {
-      await api.deleteRule(apiKey, ruleName)
-      await refresh()
+      await api.deleteRule(apiKey, ruleName);
+      await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to delete rule')
+      setError(err instanceof ApiError ? err.message : "Failed to delete rule");
     }
   }
 
@@ -112,7 +112,7 @@ export function Rules({ apiKey }: RulesProps) {
             className={`w-24 ${inputClass}`}
           />
         </div>
-        {algorithm !== 'token_bucket' && (
+        {algorithm !== "token_bucket" && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
               Window (s)
@@ -155,7 +155,10 @@ export function Rules({ apiKey }: RulesProps) {
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {!loading && rules.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-neutral-400"
+                >
                   No rules yet — add one above
                 </td>
               </tr>
@@ -177,7 +180,7 @@ export function Rules({ apiKey }: RulesProps) {
                   {rule.limit}
                 </td>
                 <td className="px-4 py-2.5 tabular-nums text-neutral-600 dark:text-neutral-400">
-                  {rule.algorithm === 'token_bucket' ? '—' : `${rule.window}s`}
+                  {rule.algorithm === "token_bucket" ? "—" : `${rule.window}s`}
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <button
@@ -193,5 +196,5 @@ export function Rules({ apiKey }: RulesProps) {
         </table>
       </div>
     </div>
-  )
+  );
 }

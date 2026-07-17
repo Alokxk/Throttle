@@ -1,60 +1,69 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { api, ApiError, type Exemption } from '../lib/api'
+import { useEffect, useState, type FormEvent } from "react";
+import { api, ApiError, type Exemption } from "../lib/api";
 
 interface ExemptionsProps {
-  apiKey: string
+  apiKey: string;
 }
 
 const inputClass =
-  'rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100'
+  "rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100";
 
 export function Exemptions({ apiKey }: ExemptionsProps) {
-  const [exemptions, setExemptions] = useState<Exemption[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [exemptions, setExemptions] = useState<Exemption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [identifier, setIdentifier] = useState('')
-  const [reason, setReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [identifier, setIdentifier] = useState("");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function refresh() {
     try {
-      setExemptions(await api.listExemptions(apiKey))
-      setError(null)
+      setExemptions(await api.listExemptions(apiKey));
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load exemptions')
+      setError(
+        err instanceof ApiError ? err.message : "Failed to load exemptions",
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    refresh()
+    refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   async function handleCreate(e: FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError(null)
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     try {
-      await api.createExemption(apiKey, { identifier: identifier.trim(), reason: reason.trim() })
-      setIdentifier('')
-      setReason('')
-      await refresh()
+      await api.createExemption(apiKey, {
+        identifier: identifier.trim(),
+        reason: reason.trim(),
+      });
+      setIdentifier("");
+      setReason("");
+      await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to create exemption')
+      setError(
+        err instanceof ApiError ? err.message : "Failed to create exemption",
+      );
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   async function handleDelete(id: string) {
     try {
-      await api.deleteExemption(apiKey, id)
-      await refresh()
+      await api.deleteExemption(apiKey, id);
+      await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to delete exemption')
+      setError(
+        err instanceof ApiError ? err.message : "Failed to delete exemption",
+      );
     }
   }
 
@@ -114,7 +123,10 @@ export function Exemptions({ apiKey }: ExemptionsProps) {
           <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
             {!loading && exemptions.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-neutral-400">
+                <td
+                  colSpan={3}
+                  className="px-4 py-8 text-center text-neutral-400"
+                >
                   No exemptions yet — add one above
                 </td>
               </tr>
@@ -144,5 +156,5 @@ export function Exemptions({ apiKey }: ExemptionsProps) {
         </table>
       </div>
     </div>
-  )
+  );
 }

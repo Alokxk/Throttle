@@ -20,9 +20,6 @@ var h *handlers.Handler
 var apiKey string
 var clientID string
 
-// httptest.NewRequest always defaults to the same RemoteAddr, which would
-// make every test run share /register's per-IP rate limit with every other
-// run. A random test-only IP keeps runs independent of each other.
 var testIP = fmt.Sprintf("10.%d.%d.%d", rand.Intn(255), rand.Intn(255), rand.Intn(255))
 
 func newRegisterRequest(body string) *httptest.ResponseRecorder {

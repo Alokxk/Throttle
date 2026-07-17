@@ -38,7 +38,7 @@ connection, at a granularity a human can't tell apart from "live" anyway.
 ```
 src/
   lib/api.ts        API client (fetch wrapper, typed responses)
-  components/        Layout, StatTile, Sparkline, Logo, icons
+  components/        Layout, StatTile, Logo, icons
   pages/              Login, Overview, Rules, Exemptions
 ```
 

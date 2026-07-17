@@ -15,9 +15,6 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
-// RunMigrations applies pending schema migrations using the same embedded
-// files everywhere the app runs (local, Docker, Kubernetes) — one mechanism,
-// so there's no separate init-script path that can drift out of sync.
 func RunMigrations(db *sql.DB) {
 	source, err := iofs.New(migrationFiles, "migrations")
 	if err != nil {

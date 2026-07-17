@@ -1,23 +1,29 @@
-import type { Client } from '../lib/api'
-import { Logo } from './Logo'
+import type { Client } from "../lib/api";
+import { Logo } from "./Logo";
 
-export type Tab = 'overview' | 'rules' | 'exemptions'
+export type Tab = "overview" | "rules" | "exemptions";
 
 interface LayoutProps {
-  client: Client
-  tab: Tab
-  onTabChange: (tab: Tab) => void
-  onLogout: () => void
-  children: React.ReactNode
+  client: Client;
+  tab: Tab;
+  onTabChange: (tab: Tab) => void;
+  onLogout: () => void;
+  children: React.ReactNode;
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'rules', label: 'Rules' },
-  { id: 'exemptions', label: 'Exemptions' },
-]
+  { id: "overview", label: "Overview" },
+  { id: "rules", label: "Rules" },
+  { id: "exemptions", label: "Exemptions" },
+];
 
-export function Layout({ client, tab, onTabChange, onLogout, children }: LayoutProps) {
+export function Layout({
+  client,
+  tab,
+  onTabChange,
+  onLogout,
+  children,
+}: LayoutProps) {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
       <header className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
@@ -28,7 +34,9 @@ export function Layout({ client, tab, onTabChange, onLogout, children }: LayoutP
               <h1 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
                 Throttle
               </h1>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">{client.name}</p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                {client.name}
+              </p>
             </div>
           </div>
           <button
@@ -45,8 +53,8 @@ export function Layout({ client, tab, onTabChange, onLogout, children }: LayoutP
               onClick={() => onTabChange(t.id)}
               className={`border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                 tab === t.id
-                  ? 'border-teal-500 text-neutral-900 dark:text-neutral-100'
-                  : 'border-transparent text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100'
+                  ? "border-teal-500 text-neutral-900 dark:text-neutral-100"
+                  : "border-transparent text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
               }`}
             >
               {t.label}
@@ -56,5 +64,5 @@ export function Layout({ client, tab, onTabChange, onLogout, children }: LayoutP
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
     </div>
-  )
+  );
 }
