@@ -44,7 +44,7 @@ echo "==> Ingress"
 kubectl apply -f k8s/ingress.yaml
 
 echo "==> In-cluster Prometheus (scrapes the K8s app, drives autoscaling)"
-kubectl apply -f k8s/prometheus.yaml
+kubectl apply -f k8s/prometheus-stack.yaml
 kubectl wait --namespace throttle --for=condition=ready pod -l app=prometheus --timeout=60s
 
 echo "==> KEDA (installs once, safe to re-run)"
@@ -56,11 +56,11 @@ echo "==> Autoscaling (scales on p95 /check latency, not CPU)"
 kubectl apply -f k8s/scaledobject.yaml
 
 echo "==> Loki (log storage)"
-kubectl apply -f k8s/loki.yaml
+kubectl apply -f k8s/loki-stack.yaml
 kubectl wait --namespace throttle --for=condition=ready pod -l app=loki --timeout=90s
 
 echo "==> Promtail (ships pod logs to Loki)"
-kubectl apply -f k8s/promtail.yaml
+kubectl apply -f k8s/promtail-stack.yaml
 kubectl wait --namespace throttle --for=condition=ready pod -l app=promtail --timeout=60s
 
 echo "==> Done. See README.md for how to reach the app."
